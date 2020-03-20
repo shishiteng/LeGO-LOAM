@@ -859,6 +859,7 @@ public:
             {
                 potentialLoopFlag = true; // find some key frames that is old enough or close enough for loop closure
                 timeSaveFirstCurrentScanForLoopClosure = timeLaserOdometry;
+                ROS_WARN("loop detected!");
             }
             if (potentialLoopFlag == false)
                 return;
