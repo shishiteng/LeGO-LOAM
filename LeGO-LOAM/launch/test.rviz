@@ -9,6 +9,7 @@ Panels:
         - /TF1/Frames1
         - /ICP cloud1
         - /Map Cloud1
+        - /Odometry1
       Splitter Ratio: 0.49567100405693054
     Tree Height: 823
   - Class: rviz/Selection
@@ -27,7 +28,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: SharpLess (green)
+    SyncSource: ""
   - Class: rviz/Help
     Name: Help
 Preferences:
@@ -42,17 +43,9 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        aft_mapped:
-          Value: true
-        base_link:
-          Value: true
-        camera:
-          Value: true
         camera_init:
           Value: true
         laser_odom:
-          Value: true
-        map:
           Value: true
       Marker Scale: 10
       Name: TF
@@ -60,14 +53,9 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          camera_init:
-            aft_mapped:
-              {}
-            camera:
-              {}
-            laser_odom:
-              {}
+        camera_init:
+          laser_odom:
+            {}
       Update Interval: 0
       Value: true
     - Class: rviz/Axes
@@ -504,6 +492,40 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 100
+      Name: Odometry
+      Position Tolerance: 0.10000000149011612
+      Shape:
+        Alpha: 1
+        Axes Length: 1
+        Axes Radius: 0.10000000149011612
+        Color: 255; 25; 0
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Axes
+      Topic: /laser_odom_to_init
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -523,25 +545,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 199.4603271484375
+      Distance: 16.41059684753418
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -13.29524040222168
-        Y: 21.1430721282959
-        Z: 19.173097610473633
+        X: -1.2798205614089966
+        Y: 5.782529830932617
+        Z: -5.402206897735596
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.03020258992910385
+      Pitch: -1.4647964239120483
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 1.295523762702942
+      Yaw: 1.635528802871704
     Saved: ~
 Window Geometry:
   Displays:
