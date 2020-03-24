@@ -11,6 +11,8 @@
 
 #include <opencv/cv.h>
 
+#include <Eigen/Eigen>
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_ros/point_cloud.h>
@@ -152,5 +154,15 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIRPYT,
                                   (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(float, roll, roll)(float, pitch, pitch)(float, yaw, yaw)(double, time, time))
 
 typedef PointXYZIRPYT PointTypePose;
+
+template <typename Derived>
+inline Eigen::Matrix<typename Derived::Scalar, 3, 3> SkewSymmetric(const Eigen::MatrixBase<Derived> &v3d)
+{
+    Eigen::Matrix<typename Derived::Scalar, 3, 3> m;
+    m << typename Derived::Scalar(0), -v3d.z(), v3d.y(),
+        v3d.z(), typename Derived::Scalar(0), -v3d.x(),
+        -v3d.y(), v3d.x(), typename Derived::Scalar(0);
+    return m;
+}
 
 #endif

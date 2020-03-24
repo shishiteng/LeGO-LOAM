@@ -34,6 +34,51 @@
 
 #include "utility.h"
 
+bool isinvalid(PointType p)
+{
+    return (isnan(p.x) || isinf(p.x) ||
+            isnan(p.y) || isinf(p.y) ||
+            isnan(p.z) || isinf(p.z));
+}
+
+void Vector2Eigen(float *v, Eigen::Matrix3f &rot, Eigen::Vector3f &pos)
+{
+    tf::Matrix3x3 m;
+    m.setRPY((double)v[0], (double)v[1], (double)v[2]);
+    rot << m[0][0], m[0][1], m[0][2],
+        m[1][0], m[1][1], m[1][2],
+        m[2][0], m[2][1], m[2][2];
+
+    pos = Eigen::Vector3f(v[3], v[4], v[5]);
+}
+
+void Vector2Eigen(float *v, Eigen::Matrix4f &trans)
+{
+    Eigen::Matrix3f rot;
+    Eigen::Vector3f pos;
+    Vector2Eigen(v, rot, pos);
+
+    trans = Eigen::Matrix4f::Identity();
+    trans.block(0, 0, 3, 3) = rot;
+    trans.block(0, 3, 3, 1) = pos;
+}
+
+void Eigen2Vector(Eigen::Matrix4f trans, float *v)
+{
+    tf::Matrix3x3 m((double)trans(0, 0), (double)trans(0, 1), (double)trans(0, 2),
+                    (double)trans(1, 0), (double)trans(1, 1), (double)trans(1, 2),
+                    (double)trans(2, 0), (double)trans(2, 1), (double)trans(2, 2));
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    v[0] = (float)roll;
+    v[1] = (float)pitch;
+    v[2] = (float)yaw;
+    v[3] = trans(0, 3);
+    v[4] = trans(1, 3);
+    v[5] = trans(2, 3);
+}
+
 class FeatureAssociation
 {
 
@@ -527,139 +572,14 @@ public:
 
         for (int i = 0; i < cloudSize; i++)
         {
+            // point不做坐标变换
+            point = segmentedCloud->points[i];
 
-            point.x = segmentedCloud->points[i].y;
-            point.y = segmentedCloud->points[i].z;
-            point.z = segmentedCloud->points[i].x;
+            // reltime要重新计算
+            // float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
+            // point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
 
-            float ori = -atan2(point.x, point.z);
-            if (!halfPassed)
-            {
-                if (ori < segInfo.startOrientation - M_PI / 2)
-                    ori += 2 * M_PI;
-                else if (ori > segInfo.startOrientation + M_PI * 3 / 2)
-                    ori -= 2 * M_PI;
-
-                if (ori - segInfo.startOrientation > M_PI)
-                    halfPassed = true;
-            }
-            else
-            {
-                ori += 2 * M_PI;
-
-                if (ori < segInfo.endOrientation - M_PI * 3 / 2)
-                    ori += 2 * M_PI;
-                else if (ori > segInfo.endOrientation + M_PI / 2)
-                    ori -= 2 * M_PI;
-            }
-
-            float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
-            point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
-
-            if (imuPointerLast >= 0)
-            {
-                float pointTime = relTime * scanPeriod;
-                imuPointerFront = imuPointerLastIteration;
-                while (imuPointerFront != imuPointerLast)
-                {
-                    if (timeScanCur + pointTime < imuTime[imuPointerFront])
-                    {
-                        break;
-                    }
-                    imuPointerFront = (imuPointerFront + 1) % imuQueLength;
-                }
-
-                if (timeScanCur + pointTime > imuTime[imuPointerFront])
-                {
-                    imuRollCur = imuRoll[imuPointerFront];
-                    imuPitchCur = imuPitch[imuPointerFront];
-                    imuYawCur = imuYaw[imuPointerFront];
-
-                    imuVeloXCur = imuVeloX[imuPointerFront];
-                    imuVeloYCur = imuVeloY[imuPointerFront];
-                    imuVeloZCur = imuVeloZ[imuPointerFront];
-
-                    imuShiftXCur = imuShiftX[imuPointerFront];
-                    imuShiftYCur = imuShiftY[imuPointerFront];
-                    imuShiftZCur = imuShiftZ[imuPointerFront];
-                }
-                else
-                {
-                    int imuPointerBack = (imuPointerFront + imuQueLength - 1) % imuQueLength;
-                    float ratioFront = (timeScanCur + pointTime - imuTime[imuPointerBack]) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-                    float ratioBack = (imuTime[imuPointerFront] - timeScanCur - pointTime) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-
-                    imuRollCur = imuRoll[imuPointerFront] * ratioFront + imuRoll[imuPointerBack] * ratioBack;
-                    imuPitchCur = imuPitch[imuPointerFront] * ratioFront + imuPitch[imuPointerBack] * ratioBack;
-                    if (imuYaw[imuPointerFront] - imuYaw[imuPointerBack] > M_PI)
-                    {
-                        imuYawCur = imuYaw[imuPointerFront] * ratioFront + (imuYaw[imuPointerBack] + 2 * M_PI) * ratioBack;
-                    }
-                    else if (imuYaw[imuPointerFront] - imuYaw[imuPointerBack] < -M_PI)
-                    {
-                        imuYawCur = imuYaw[imuPointerFront] * ratioFront + (imuYaw[imuPointerBack] - 2 * M_PI) * ratioBack;
-                    }
-                    else
-                    {
-                        imuYawCur = imuYaw[imuPointerFront] * ratioFront + imuYaw[imuPointerBack] * ratioBack;
-                    }
-
-                    imuVeloXCur = imuVeloX[imuPointerFront] * ratioFront + imuVeloX[imuPointerBack] * ratioBack;
-                    imuVeloYCur = imuVeloY[imuPointerFront] * ratioFront + imuVeloY[imuPointerBack] * ratioBack;
-                    imuVeloZCur = imuVeloZ[imuPointerFront] * ratioFront + imuVeloZ[imuPointerBack] * ratioBack;
-
-                    imuShiftXCur = imuShiftX[imuPointerFront] * ratioFront + imuShiftX[imuPointerBack] * ratioBack;
-                    imuShiftYCur = imuShiftY[imuPointerFront] * ratioFront + imuShiftY[imuPointerBack] * ratioBack;
-                    imuShiftZCur = imuShiftZ[imuPointerFront] * ratioFront + imuShiftZ[imuPointerBack] * ratioBack;
-                }
-
-                if (i == 0)
-                {
-                    imuRollStart = imuRollCur;
-                    imuPitchStart = imuPitchCur;
-                    imuYawStart = imuYawCur;
-
-                    imuVeloXStart = imuVeloXCur;
-                    imuVeloYStart = imuVeloYCur;
-                    imuVeloZStart = imuVeloZCur;
-
-                    imuShiftXStart = imuShiftXCur;
-                    imuShiftYStart = imuShiftYCur;
-                    imuShiftZStart = imuShiftZCur;
-
-                    if (timeScanCur + pointTime > imuTime[imuPointerFront])
-                    {
-                        imuAngularRotationXCur = imuAngularRotationX[imuPointerFront];
-                        imuAngularRotationYCur = imuAngularRotationY[imuPointerFront];
-                        imuAngularRotationZCur = imuAngularRotationZ[imuPointerFront];
-                    }
-                    else
-                    {
-                        int imuPointerBack = (imuPointerFront + imuQueLength - 1) % imuQueLength;
-                        float ratioFront = (timeScanCur + pointTime - imuTime[imuPointerBack]) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-                        float ratioBack = (imuTime[imuPointerFront] - timeScanCur - pointTime) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-                        imuAngularRotationXCur = imuAngularRotationX[imuPointerFront] * ratioFront + imuAngularRotationX[imuPointerBack] * ratioBack;
-                        imuAngularRotationYCur = imuAngularRotationY[imuPointerFront] * ratioFront + imuAngularRotationY[imuPointerBack] * ratioBack;
-                        imuAngularRotationZCur = imuAngularRotationZ[imuPointerFront] * ratioFront + imuAngularRotationZ[imuPointerBack] * ratioBack;
-                    }
-
-                    imuAngularFromStartX = imuAngularRotationXCur - imuAngularRotationXLast;
-                    imuAngularFromStartY = imuAngularRotationYCur - imuAngularRotationYLast;
-                    imuAngularFromStartZ = imuAngularRotationZCur - imuAngularRotationZLast;
-
-                    imuAngularRotationXLast = imuAngularRotationXCur;
-                    imuAngularRotationYLast = imuAngularRotationYCur;
-                    imuAngularRotationZLast = imuAngularRotationZCur;
-
-                    updateImuRollPitchYawStartSinCos();
-                }
-                else
-                {
-                    VeloToStartIMU();
-                    TransformToStartIMU(&point);
-                }
-            }
-            segmentedCloud->points[i] = point;
+            // segmentedCloud->points[i] = point;
         }
 
         imuPointerLastIteration = imuPointerLast;
@@ -1069,12 +989,9 @@ public:
                             break;
                         }
 
-                        pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) *
-                                         (laserCloudCornerLast->points[j].x - pointSel.x) +
-                                     (laserCloudCornerLast->points[j].y - pointSel.y) *
-                                         (laserCloudCornerLast->points[j].y - pointSel.y) +
-                                     (laserCloudCornerLast->points[j].z - pointSel.z) *
-                                         (laserCloudCornerLast->points[j].z - pointSel.z);
+                        pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) * (laserCloudCornerLast->points[j].x - pointSel.x) +
+                                     (laserCloudCornerLast->points[j].y - pointSel.y) * (laserCloudCornerLast->points[j].y - pointSel.y) +
+                                     (laserCloudCornerLast->points[j].z - pointSel.z) * (laserCloudCornerLast->points[j].z - pointSel.z);
 
                         if (int(laserCloudCornerLast->points[j].intensity) > closestPointScan)
                         {
@@ -1092,12 +1009,9 @@ public:
                             break;
                         }
 
-                        pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) *
-                                         (laserCloudCornerLast->points[j].x - pointSel.x) +
-                                     (laserCloudCornerLast->points[j].y - pointSel.y) *
-                                         (laserCloudCornerLast->points[j].y - pointSel.y) +
-                                     (laserCloudCornerLast->points[j].z - pointSel.z) *
-                                         (laserCloudCornerLast->points[j].z - pointSel.z);
+                        pointSqDis = (laserCloudCornerLast->points[j].x - pointSel.x) * (laserCloudCornerLast->points[j].x - pointSel.x) +
+                                     (laserCloudCornerLast->points[j].y - pointSel.y) * (laserCloudCornerLast->points[j].y - pointSel.y) +
+                                     (laserCloudCornerLast->points[j].z - pointSel.z) * (laserCloudCornerLast->points[j].z - pointSel.z);
 
                         if (int(laserCloudCornerLast->points[j].intensity) < closestPointScan)
                         {
@@ -1161,6 +1075,15 @@ public:
 
                     laserCloudOri->push_back(cornerPointsSharp->points[i]);
                     coeffSel->push_back(coeff);
+
+                    // printf(">>>>>>>>\n");
+                    // printf("x0: %lf %lf %lf\n", x0, y0, z0);
+                    // printf("x1: %lf %lf %lf\n", x1, y1, z1);
+                    // printf("x2: %lf %lf %lf\n", x2, y2, z2);
+                    // printf("a012_%lf l12_%lf ld2_%lf\n", a012, l12, ld2);
+                    // printf("la_%lf lb_%lf lc_%lf ld_%lf\n", la, lb, lc, ld2);
+                    // printf("s_%lf\n", s);
+                    // printf("<<<<<<<<<\n");
                 }
             }
         }
@@ -1195,12 +1118,9 @@ public:
                             break;
                         }
 
-                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
-                                         (laserCloudSurfLast->points[j].x - pointSel.x) +
-                                     (laserCloudSurfLast->points[j].y - pointSel.y) *
-                                         (laserCloudSurfLast->points[j].y - pointSel.y) +
-                                     (laserCloudSurfLast->points[j].z - pointSel.z) *
-                                         (laserCloudSurfLast->points[j].z - pointSel.z);
+                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) * (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                     (laserCloudSurfLast->points[j].y - pointSel.y) * (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                     (laserCloudSurfLast->points[j].z - pointSel.z) * (laserCloudSurfLast->points[j].z - pointSel.z);
 
                         if (int(laserCloudSurfLast->points[j].intensity) <= closestPointScan)
                         {
@@ -1226,12 +1146,9 @@ public:
                             break;
                         }
 
-                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) *
-                                         (laserCloudSurfLast->points[j].x - pointSel.x) +
-                                     (laserCloudSurfLast->points[j].y - pointSel.y) *
-                                         (laserCloudSurfLast->points[j].y - pointSel.y) +
-                                     (laserCloudSurfLast->points[j].z - pointSel.z) *
-                                         (laserCloudSurfLast->points[j].z - pointSel.z);
+                        pointSqDis = (laserCloudSurfLast->points[j].x - pointSel.x) * (laserCloudSurfLast->points[j].x - pointSel.x) +
+                                     (laserCloudSurfLast->points[j].y - pointSel.y) * (laserCloudSurfLast->points[j].y - pointSel.y) +
+                                     (laserCloudSurfLast->points[j].z - pointSel.z) * (laserCloudSurfLast->points[j].z - pointSel.z);
 
                         if (int(laserCloudSurfLast->points[j].intensity) >= closestPointScan)
                         {
@@ -1300,7 +1217,6 @@ public:
 
     bool calculateTransformationSurf(int iterCount)
     {
-
         int pointSelNum = laserCloudOri->points.size();
 
         cv::Mat matA(pointSelNum, 3, CV_32F, cv::Scalar::all(0));
@@ -1310,6 +1226,10 @@ public:
         cv::Mat matAtB(3, 1, CV_32F, cv::Scalar::all(0));
         cv::Mat matX(3, 1, CV_32F, cv::Scalar::all(0));
 
+        // 传统的旋转矩阵R=Rz*Ry*Rx来表示，是zyx的顺序
+        // 但是loam里采用了yxz的顺序，丧心病狂啊！！！
+        // 参考https://zhuanlan.zhihu.com/p/57351961
+        // 参考https://en.wikipedia.org/wiki/Euler_angles
         float srx = sin(transformCur[0]);
         float crx = cos(transformCur[0]);
         float sry = sin(transformCur[1]);
@@ -1353,9 +1273,13 @@ public:
             pointOri = laserCloudOri->points[i];
             coeff = coeffSel->points[i];
 
-            float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x + (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y + (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
+            float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x +
+                        (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y +
+                        (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
 
-            float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x + (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y + (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
+            float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x +
+                        (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y +
+                        (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
 
             float aty = -b6 * coeff.x + c4 * coeff.y + b2 * coeff.z;
 
@@ -1428,6 +1352,288 @@ public:
         {
             return false;
         }
+        return true;
+    }
+
+    bool calculateTransformationSurfX(int iterCount)
+    {
+        int pointSelNum = laserCloudOri->points.size();
+
+        Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
+        Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
+        Eigen::Matrix<float, 6, 6> matAtA;
+        Eigen::VectorXf matB(pointSelNum);
+        Eigen::VectorXf matAtB;
+        Eigen::VectorXf matX;
+        Eigen::Matrix<float, 6, 6> matP;
+
+        Eigen::Matrix3f right_info_mat;
+        right_info_mat.setZero();
+        right_info_mat(0, 0) = 1.0;
+        right_info_mat(1, 1) = 1.0;
+        right_info_mat(2, 2) = 0.0;
+
+        Eigen::Matrix3f local_transform_rot;
+        Eigen::Vector3f local_transform_pos;
+        Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
+
+        std::cout << "local_transform_rot:" << local_transform_rot << std::endl;
+        std::cout << "local_transform_pos:" << local_transform_pos << std::endl;
+
+        for (int i = 0; i < pointSelNum; i++)
+        {
+            PointType pointOri = laserCloudOri->points[i];
+            PointType coeff = coeffSel->points[i];
+            if (isinvalid(pointOri) || isinvalid(coeff))
+            {
+                std::cout << ".";
+                continue;
+            }
+
+            Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
+            Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
+
+            Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
+            Eigen::Vector3f Jt = w.transpose();
+
+            // d2: 点到平面的距离
+            // float d2 = w.transpose() * (local_transform_rot * p + local_transform_pos) + coeff.intensity;
+            float d2 = coeff.intensity;
+
+            // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
+
+            matA(i, 0) = Jr.x();
+            matA(i, 1) = Jr.y();
+            matA(i, 2) = Jt.z();
+            matA(i, 3) = Jt.x();
+            matA(i, 4) = Jt.y();
+            matA(i, 5) = Jt.z();
+            matB(i, 0) = -0.05 * d2;
+            // printf("%d\n", i);
+            // std::cout << matA << std::endl;
+            // std::cout << matB << std::endl;
+        }
+
+        // Ax=B,通解x=(At*A).inv*At*B
+        // At*A*x=At*B
+        matAt = matA.transpose();
+        matAtA = matAt * matA;
+        matAtB = matAt * matB;
+        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+
+        std::cout << "====surf===" << std::endl;
+        // std::cout << "matA:\n"
+        //           << matA << std::endl;
+        // std::cout << "matB:\n"
+        //           << matB << std::endl;
+        std::cout << "matAtA:\n"
+                  << matAtA << std::endl;
+        std::cout << "matAtB:\n"
+                  << matAtB << std::endl;
+        std::cout << "matX:\n"
+                  << matX << std::endl;
+        std::cout << "=======" << std::endl;
+
+        if (iterCount == 0)
+        {
+            Eigen::Matrix<float, 1, 6> matE;
+            Eigen::Matrix<float, 6, 6> matV;
+            Eigen::Matrix<float, 6, 6> matV2;
+
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>> esolver(matAtA);
+            matE = esolver.eigenvalues().real();
+            matV = esolver.eigenvectors().real();
+            matV2 = matV;
+
+            std::cout << "matE:\n"
+                      << matE << std::endl;
+
+            isDegenerate = false;
+            float eignThre[6] = {10, 10, 10, 10, 10, 10};
+            // float eignThre[3] = {100, 100, 100};
+            for (int i = 0; i < 6; i++)
+            {
+                if (matE(0, i) < eignThre[i])
+                {
+                    for (int j = 0; j < 6; j++)
+                    {
+                        matV2(i, j) = 0;
+                    }
+                    isDegenerate = true;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            matP = matV * matV2.inverse();
+            // matP = matV.inv() * matV2; // 原来的i是从2开始迭代的
+            // matP = mat_V2 * mat_V.inverse();// lio mapping里是这样的！！！！
+        }
+
+        if (isDegenerate)
+        {
+            ROS_WARN("surf degenerate");
+            Eigen::Matrix<float, 6, 1> matX2(matX);
+            matX = matP * matX2;
+        }
+
+        std::cout << matX << std::endl;
+
+        // roll pitch z
+        transformCur[0] += matX(0, 0);
+        transformCur[1] += matX(1, 0);
+        transformCur[5] += matX(2, 0);
+
+        for (int i = 0; i < 6; i++)
+        {
+            if (isnan(transformCur[i]))
+                transformCur[i] = 0;
+        }
+
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) + pow(rad2deg(matX(1, 0)), 2));
+        float deltaT = sqrt(pow(matX(2, 0) * 100, 2));
+
+        if (deltaR < 0.1 && deltaT < 0.1)
+        {
+            printf("surf converge: iter %d\n", iterCount);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool calculateTransformationCornerX(int iterCount)
+    {
+        int pointSelNum = laserCloudOri->points.size();
+
+        Eigen::Matrix<float, Eigen::Dynamic, 3> matA(pointSelNum, 3);
+        Eigen::Matrix<float, 3, Eigen::Dynamic> matAt(3, pointSelNum);
+        Eigen::Matrix<float, 3, 3> matAtA;
+        Eigen::VectorXf matB(pointSelNum);
+        Eigen::VectorXf matAtB;
+        Eigen::VectorXf matX;
+        Eigen::Matrix<float, 3, 3> matP;
+
+        Eigen::Matrix3f right_info_mat;
+        right_info_mat.setZero();
+        right_info_mat(0, 0) = 1.0;
+        right_info_mat(1, 1) = 1.0;
+        right_info_mat(2, 2) = 1.0;
+
+        Eigen::Matrix3f local_transform_rot;
+        Eigen::Vector3f local_transform_pos;
+        Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
+
+        std::cout << "local_transform_rot:" << local_transform_rot << std::endl;
+        std::cout << "local_transform_pos:" << local_transform_pos << std::endl;
+
+        for (int i = 0; i < pointSelNum; i++)
+        {
+            PointType pointOri = laserCloudOri->points[i];
+            PointType coeff = coeffSel->points[i];
+            if (isinvalid(pointOri))
+                continue;
+
+            Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
+            Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
+
+            Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
+            Eigen::Vector3f Jt = w.transpose();
+
+            // d2: 点到直线的距离
+            // float d2 = w.transpose() * (local_transform_rot * p + local_transform_pos) + coeff.intensity;
+            float d2 = coeff.intensity;
+
+            matA(i, 0) = Jr.z();
+            matA(i, 1) = Jt.x();
+            matA(i, 2) = Jt.y();
+            matB(i, 0) = -0.05 * d2;
+
+            // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
+        }
+
+        // Ax=B,通解x=(At*A).inv*At*B
+        // At*A*x=At*B
+        matAt = matA.transpose();
+        matAtA = matAt * matA;
+        matAtB = matAt * matB;
+        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+
+        std::cout << "====corner===" << std::endl;
+        // std::cout << "matA:\n"
+        //           << matA << std::endl;
+        // std::cout << "matB:\n"
+        //           << matB << std::endl;
+        std::cout << "matAtA:\n"
+                  << matAtA << std::endl;
+        std::cout << "matAtB:\n"
+                  << matAtB << std::endl;
+        std::cout << "matX:\n"
+                  << matX << std::endl;
+        std::cout << "=======" << std::endl;
+
+        if (iterCount == 0)
+        {
+            Eigen::Matrix<float, 1, 3> matE;
+            Eigen::Matrix<float, 3, 3> matV;
+            Eigen::Matrix<float, 3, 3> matV2;
+
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 3, 3>> esolver(matAtA);
+            matE = esolver.eigenvalues().real();
+            matV = esolver.eigenvectors().real();
+            matV2 = matV;
+
+            isDegenerate = false;
+            float eignThre[3] = {10, 10, 10};
+            // float eignThre[3] = {100, 100, 100};
+            for (int i = 0; i < 3; i++)
+            {
+                if (matE(0, i) < eignThre[i])
+                {
+                    for (int j = 0; j < 3; j++)
+                    {
+                        matV2(i, j) = 0;
+                    }
+                    isDegenerate = true;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            matP = matV * matV2.inverse();
+        }
+
+        if (isDegenerate)
+        {
+            ROS_WARN("surf degenerate");
+            Eigen::Matrix<float, 3, 1> matX2(matX);
+            matX = matP * matX2;
+        }
+
+        std::cout << matX << std::endl;
+
+        // yaw x y
+        transformCur[2] += matX(0, 0);
+        transformCur[3] += matX(1, 0);
+        transformCur[4] += matX(2, 0);
+
+        for (int i = 0; i < 6; i++)
+        {
+            if (isnan(transformCur[i]))
+                transformCur[i] = 0;
+        }
+
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) + pow(rad2deg(matX(1, 0)), 2));
+        float deltaT = sqrt(pow(matX(2, 0) * 100, 2));
+
+        if (deltaR < 0.1 && deltaT < 0.1)
+        {
+            printf("corner converge: iter %d\n", iterCount);
+            return false;
+        }
+
         return true;
     }
 
@@ -1738,36 +1944,42 @@ public:
     void updateInitialGuess()
     {
 
-        imuPitchLast = imuPitchCur;
-        imuYawLast = imuYawCur;
-        imuRollLast = imuRollCur;
+        // imuPitchLast = imuPitchCur;
+        // imuYawLast = imuYawCur;
+        // imuRollLast = imuRollCur;
 
-        imuShiftFromStartX = imuShiftFromStartXCur;
-        imuShiftFromStartY = imuShiftFromStartYCur;
-        imuShiftFromStartZ = imuShiftFromStartZCur;
+        // imuShiftFromStartX = imuShiftFromStartXCur;
+        // imuShiftFromStartY = imuShiftFromStartYCur;
+        // imuShiftFromStartZ = imuShiftFromStartZCur;
 
-        imuVeloFromStartX = imuVeloFromStartXCur;
-        imuVeloFromStartY = imuVeloFromStartYCur;
-        imuVeloFromStartZ = imuVeloFromStartZCur;
+        // imuVeloFromStartX = imuVeloFromStartXCur;
+        // imuVeloFromStartY = imuVeloFromStartYCur;
+        // imuVeloFromStartZ = imuVeloFromStartZCur;
 
-        if (imuAngularFromStartX != 0 || imuAngularFromStartY != 0 || imuAngularFromStartZ != 0)
-        {
-            transformCur[0] = -imuAngularFromStartY;
-            transformCur[1] = -imuAngularFromStartZ;
-            transformCur[2] = -imuAngularFromStartX;
-        }
+        // if (imuAngularFromStartX != 0 || imuAngularFromStartY != 0 || imuAngularFromStartZ != 0)
+        // {
+        //     transformCur[0] = -imuAngularFromStartY;
+        //     transformCur[1] = -imuAngularFromStartZ;
+        //     transformCur[2] = -imuAngularFromStartX;
+        // }
 
-        if (imuVeloFromStartX != 0 || imuVeloFromStartY != 0 || imuVeloFromStartZ != 0)
-        {
-            transformCur[3] -= imuVeloFromStartX * scanPeriod;
-            transformCur[4] -= imuVeloFromStartY * scanPeriod;
-            transformCur[5] -= imuVeloFromStartZ * scanPeriod;
-        }
+        // if (imuVeloFromStartX != 0 || imuVeloFromStartY != 0 || imuVeloFromStartZ != 0)
+        // {
+        //     transformCur[3] -= imuVeloFromStartX * scanPeriod;
+        //     transformCur[4] -= imuVeloFromStartY * scanPeriod;
+        //     transformCur[5] -= imuVeloFromStartZ * scanPeriod;
+        // }
+
+        transformCur[0] = 0;
+        transformCur[1] = 0;
+        transformCur[2] = 0;
+        transformCur[3] = 0;
+        transformCur[4] = 0;
+        transformCur[5] = 0;
     }
 
     void updateTransformation()
     {
-
         if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100)
             return;
 
@@ -1780,62 +1992,78 @@ public:
 
             if (laserCloudOri->points.size() < 10)
                 continue;
-            if (calculateTransformationSurf(iterCount1) == false)
+
+            ROS_DEBUG("iter_%d surf features: %u", iterCount1, laserCloudOri->points.size());
+            if (calculateTransformationSurfX(iterCount1) == false)
                 break;
+
+            ROS_DEBUG("transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f",
+                      transformCur[0], transformCur[1], transformCur[2], transformCur[3], transformCur[4], transformCur[5]);
         }
 
         for (int iterCount2 = 0; iterCount2 < 25; iterCount2++)
         {
-
             laserCloudOri->clear();
             coeffSel->clear();
 
             findCorrespondingCornerFeatures(iterCount2);
 
+            ROS_DEBUG("iter_%d coner features: %u", iterCount2, laserCloudOri->points.size());
             if (laserCloudOri->points.size() < 10)
                 continue;
-            if (calculateTransformationCorner(iterCount2) == false)
+            if (calculateTransformationCornerX(iterCount2) == false)
                 break;
+            ROS_DEBUG("transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f",
+                      transformCur[0], transformCur[1], transformCur[2], transformCur[3], transformCur[4], transformCur[5]);
         }
     }
 
     void integrateTransformation()
     {
-        float rx, ry, rz, tx, ty, tz;
-        AccumulateRotation(transformSum[0], transformSum[1], transformSum[2],
-                           -transformCur[0], -transformCur[1], -transformCur[2], rx, ry, rz);
+        // float rx, ry, rz, tx, ty, tz;
+        // AccumulateRotation(transformSum[0], transformSum[1], transformSum[2],
+        //                    -transformCur[0], -transformCur[1], -transformCur[2], rx, ry, rz);
 
-        float x1 = cos(rz) * (transformCur[3] - imuShiftFromStartX) - sin(rz) * (transformCur[4] - imuShiftFromStartY);
-        float y1 = sin(rz) * (transformCur[3] - imuShiftFromStartX) + cos(rz) * (transformCur[4] - imuShiftFromStartY);
-        float z1 = transformCur[5] - imuShiftFromStartZ;
+        // float x1 = cos(rz) * (transformCur[3] - imuShiftFromStartX) - sin(rz) * (transformCur[4] - imuShiftFromStartY);
+        // float y1 = sin(rz) * (transformCur[3] - imuShiftFromStartX) + cos(rz) * (transformCur[4] - imuShiftFromStartY);
+        // float z1 = transformCur[5] - imuShiftFromStartZ;
 
-        float x2 = x1;
-        float y2 = cos(rx) * y1 - sin(rx) * z1;
-        float z2 = sin(rx) * y1 + cos(rx) * z1;
+        // float x2 = x1;
+        // float y2 = cos(rx) * y1 - sin(rx) * z1;
+        // float z2 = sin(rx) * y1 + cos(rx) * z1;
 
-        tx = transformSum[3] - (cos(ry) * x2 + sin(ry) * z2);
-        ty = transformSum[4] - y2;
-        tz = transformSum[5] - (-sin(ry) * x2 + cos(ry) * z2);
+        // tx = transformSum[3] - (cos(ry) * x2 + sin(ry) * z2);
+        // ty = transformSum[4] - y2;
+        // tz = transformSum[5] - (-sin(ry) * x2 + cos(ry) * z2);
 
-        PluginIMURotation(rx, ry, rz, imuPitchStart, imuYawStart, imuRollStart,
-                          imuPitchLast, imuYawLast, imuRollLast, rx, ry, rz);
+        // PluginIMURotation(rx, ry, rz, imuPitchStart, imuYawStart, imuRollStart,
+        //                   imuPitchLast, imuYawLast, imuRollLast, rx, ry, rz);
 
-        transformSum[0] = rx;
-        transformSum[1] = ry;
-        transformSum[2] = rz;
-        transformSum[3] = tx;
-        transformSum[4] = ty;
-        transformSum[5] = tz;
+        // transformSum[0] = rx;
+        // transformSum[1] = ry;
+        // transformSum[2] = rz;
+        // transformSum[3] = tx;
+        // transformSum[4] = ty;
+        // transformSum[5] = tz;
+
+        Eigen::Matrix4f trans_sum, trans_local;
+        Vector2Eigen(transformSum, trans_sum);
+        Vector2Eigen(transformCur, trans_local);
+
+        // i2w = j2w * i2j;
+        Eigen::Matrix4f pose = trans_sum * trans_local;
+
+        Eigen2Vector(pose, transformSum);
     }
 
     void publishOdometry()
     {
-        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformSum[2], -transformSum[0], -transformSum[1]);
+        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformSum[0], transformSum[1], transformSum[2]);
 
         laserOdometry.header.stamp = cloudHeader.stamp;
-        laserOdometry.pose.pose.orientation.x = -geoQuat.y;
-        laserOdometry.pose.pose.orientation.y = -geoQuat.z;
-        laserOdometry.pose.pose.orientation.z = geoQuat.x;
+        laserOdometry.pose.pose.orientation.x = geoQuat.x;
+        laserOdometry.pose.pose.orientation.y = geoQuat.y;
+        laserOdometry.pose.pose.orientation.z = geoQuat.z;
         laserOdometry.pose.pose.orientation.w = geoQuat.w;
         laserOdometry.pose.pose.position.x = transformSum[3];
         laserOdometry.pose.pose.position.y = transformSum[4];
@@ -1843,7 +2071,7 @@ public:
         pubLaserOdometry.publish(laserOdometry);
 
         laserOdometryTrans.stamp_ = cloudHeader.stamp;
-        laserOdometryTrans.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
+        laserOdometryTrans.setRotation(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w));
         laserOdometryTrans.setOrigin(tf::Vector3(transformSum[3], transformSum[4], transformSum[5]));
         tfBroadcaster.sendTransform(laserOdometryTrans);
     }
@@ -1977,6 +2205,8 @@ public:
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "lego_loam");
+
+    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
 
     ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
 
