@@ -1227,9 +1227,39 @@ public:
         cv::Mat matX(3, 1, CV_32F, cv::Scalar::all(0));
 
         // 传统的旋转矩阵R=Rz*Ry*Rx来表示，是zyx的顺序
-        // 但是loam里采用了yxz的顺序，丧心病狂啊！！！
+        // 但是loam计算雅可比时采用了zxy的顺序，丧心病狂啊！！！
         // 参考https://zhuanlan.zhihu.com/p/57351961
         // 参考https://en.wikipedia.org/wiki/Euler_angles
+
+        /*
+        *            SxSySz+CyCz  SxSyCz-CySz   CxSy 
+        * Ry*Rx*Rz = CxSz         CxCz         -Sx
+        *            SxCySz-SyCz  SxCyCz+SySz   CxCy
+        */
+
+        // cost fuction: w[-R(p-t)]+d=0，注意并不是w(Rp+t)+d=0!!!!!!
+
+        // 雅可比：
+        // 对rx：
+        //  CxSySz   CxSyCz  -SxSy
+        // -SxSz    -SxCz    -Cx
+        //  CxCySz   CxCyCz  -SxCy
+
+        // 对ry:
+        //  SxCySz-SyCz  SxCyCz+SySz   CxCy
+        //  0            0             0
+        // -SxSySz-CyCz -SxSyCz+CySz  -CxSy
+
+        // 对rz:
+        // SxSyCz-CySz -SxSySz-CyCz   0
+        // CxCz        -CxSz          0
+        // SxCyCz+SySz -SxCySz+SyCz   0
+
+        // 对t:
+        //  SxSySz+CyCz  SxSyCz-CySz   CxSy
+        //  CxSz         CxCz         -Sx
+        //  SxCySz-SyCz  SxCyCz+SySz   CxCy
+
         float srx = sin(transformCur[0]);
         float crx = cos(transformCur[0]);
         float sry = sin(transformCur[1]);
@@ -1359,13 +1389,13 @@ public:
     {
         int pointSelNum = laserCloudOri->points.size();
 
-        Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
-        Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
-        Eigen::Matrix<float, 6, 6> matAtA;
+        Eigen::Matrix<float, Eigen::Dynamic, 3> matA(pointSelNum, 3);
+        Eigen::Matrix<float, 3, Eigen::Dynamic> matAt(3, pointSelNum);
+        Eigen::Matrix<float, 3, 3> matAtA;
         Eigen::VectorXf matB(pointSelNum);
         Eigen::VectorXf matAtB;
         Eigen::VectorXf matX;
-        Eigen::Matrix<float, 6, 6> matP;
+        Eigen::Matrix<float, 3, 3> matP;
 
         Eigen::Matrix3f right_info_mat;
         right_info_mat.setZero();
@@ -1377,8 +1407,10 @@ public:
         Eigen::Vector3f local_transform_pos;
         Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
 
-        std::cout << "local_transform_rot:" << local_transform_rot << std::endl;
-        std::cout << "local_transform_pos:" << local_transform_pos << std::endl;
+        std::cout << "local_transform_rot:\n"
+                  << local_transform_rot << std::endl;
+        std::cout << "local_transform_pos:\n"
+                  << local_transform_pos.transpose() << std::endl;
 
         for (int i = 0; i < pointSelNum; i++)
         {
@@ -1405,10 +1437,10 @@ public:
             matA(i, 0) = Jr.x();
             matA(i, 1) = Jr.y();
             matA(i, 2) = Jt.z();
-            matA(i, 3) = Jt.x();
-            matA(i, 4) = Jt.y();
-            matA(i, 5) = Jt.z();
-            matB(i, 0) = -0.05 * d2;
+            // matA(i, 3) = Jt.x();
+            // matA(i, 4) = Jt.y();
+            // matA(i, 5) = Jt.z();
+            matB(i, 0) = -d2;
             // printf("%d\n", i);
             // std::cout << matA << std::endl;
             // std::cout << matB << std::endl;
@@ -1429,33 +1461,33 @@ public:
         std::cout << "matAtA:\n"
                   << matAtA << std::endl;
         std::cout << "matAtB:\n"
-                  << matAtB << std::endl;
+                  << matAtB.transpose() << std::endl;
         std::cout << "matX:\n"
-                  << matX << std::endl;
+                  << matX.transpose() << std::endl;
         std::cout << "=======" << std::endl;
 
         if (iterCount == 0)
         {
-            Eigen::Matrix<float, 1, 6> matE;
-            Eigen::Matrix<float, 6, 6> matV;
-            Eigen::Matrix<float, 6, 6> matV2;
+            Eigen::Matrix<float, 1, 3> matE;
+            Eigen::Matrix<float, 3, 3> matV;
+            Eigen::Matrix<float, 3, 3> matV2;
 
-            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>> esolver(matAtA);
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 3, 3>> esolver(matAtA);
             matE = esolver.eigenvalues().real();
             matV = esolver.eigenvectors().real();
             matV2 = matV;
 
             std::cout << "matE:\n"
-                      << matE << std::endl;
+                      << matE.transpose() << std::endl;
 
             isDegenerate = false;
-            float eignThre[6] = {10, 10, 10, 10, 10, 10};
+            float eignThre[3] = {10, 10, 10};
             // float eignThre[3] = {100, 100, 100};
-            for (int i = 0; i < 6; i++)
+            for (int i = 2; i >= 0; i--)
             {
                 if (matE(0, i) < eignThre[i])
                 {
-                    for (int j = 0; j < 6; j++)
+                    for (int j = 0; j < 3; j++)
                     {
                         matV2(i, j) = 0;
                     }
@@ -1467,23 +1499,26 @@ public:
                 }
             }
             matP = matV * matV2.inverse();
-            // matP = matV.inv() * matV2; // 原来的i是从2开始迭代的
+            // matP = matV.inverse() * matV2; // 原来的i是从2开始迭代的
             // matP = mat_V2 * mat_V.inverse();// lio mapping里是这样的！！！！
         }
 
         if (isDegenerate)
         {
             ROS_WARN("surf degenerate");
-            Eigen::Matrix<float, 6, 1> matX2(matX);
+            Eigen::Matrix<float, 3, 1> matX2(matX);
             matX = matP * matX2;
         }
 
-        std::cout << matX << std::endl;
+        std::cout << matX.transpose() << std::endl;
 
         // roll pitch z
-        transformCur[0] += matX(0, 0);
-        transformCur[1] += matX(1, 0);
-        transformCur[5] += matX(2, 0);
+        // transformCur[0] += matX(0, 0);
+        // transformCur[1] += matX(1, 0);
+        // transformCur[5] += matX(2, 0);
+        transformCur[0] -= matX(0, 0);
+        transformCur[1] -= matX(1, 0);
+        transformCur[5] -= matX(2, 0);
 
         for (int i = 0; i < 6; i++)
         {
@@ -1517,16 +1552,18 @@ public:
 
         Eigen::Matrix3f right_info_mat;
         right_info_mat.setZero();
-        right_info_mat(0, 0) = 1.0;
-        right_info_mat(1, 1) = 1.0;
+        right_info_mat(0, 0) = 0.0;
+        right_info_mat(1, 1) = 0.0;
         right_info_mat(2, 2) = 1.0;
 
         Eigen::Matrix3f local_transform_rot;
         Eigen::Vector3f local_transform_pos;
         Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
 
-        std::cout << "local_transform_rot:" << local_transform_rot << std::endl;
-        std::cout << "local_transform_pos:" << local_transform_pos << std::endl;
+        std::cout << "local_transform_rot:\n"
+                  << local_transform_rot << std::endl;
+        std::cout << "local_transform_pos:\n"
+                  << local_transform_pos.transpose() << std::endl;
 
         for (int i = 0; i < pointSelNum; i++)
         {
@@ -1548,7 +1585,7 @@ public:
             matA(i, 0) = Jr.z();
             matA(i, 1) = Jt.x();
             matA(i, 2) = Jt.y();
-            matB(i, 0) = -0.05 * d2;
+            matB(i, 0) = -d2;
 
             // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
         }
@@ -1568,9 +1605,9 @@ public:
         std::cout << "matAtA:\n"
                   << matAtA << std::endl;
         std::cout << "matAtB:\n"
-                  << matAtB << std::endl;
+                  << matAtB.transpose() << std::endl;
         std::cout << "matX:\n"
-                  << matX << std::endl;
+                  << matX.transpose() << std::endl;
         std::cout << "=======" << std::endl;
 
         if (iterCount == 0)
@@ -1587,7 +1624,7 @@ public:
             isDegenerate = false;
             float eignThre[3] = {10, 10, 10};
             // float eignThre[3] = {100, 100, 100};
-            for (int i = 0; i < 3; i++)
+            for (int i = 2; i >= 0; i--)
             {
                 if (matE(0, i) < eignThre[i])
                 {
@@ -1612,12 +1649,15 @@ public:
             matX = matP * matX2;
         }
 
-        std::cout << matX << std::endl;
+        std::cout << matX.transpose() << std::endl;
 
         // yaw x y
-        transformCur[2] += matX(0, 0);
-        transformCur[3] += matX(1, 0);
-        transformCur[4] += matX(2, 0);
+        // transformCur[2] += matX(0, 0);
+        // transformCur[3] += matX(1, 0);
+        // transformCur[4] += matX(2, 0);
+        transformCur[2] -= matX(0, 0);
+        transformCur[3] -= matX(1, 0);
+        transformCur[4] -= matX(2, 0);
 
         for (int i = 0; i < 6; i++)
         {
@@ -1676,7 +1716,8 @@ public:
             pointOri = laserCloudOri->points[i];
             coeff = coeffSel->points[i];
 
-            float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
+            float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x +
+                        (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
 
             float atx = -b5 * coeff.x + c5 * coeff.y + b1 * coeff.z;
 
@@ -1813,11 +1854,16 @@ public:
             pointOri = laserCloudOri->points[i];
             coeff = coeffSel->points[i];
 
-            float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x + (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y + (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
+            float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x +
+                        (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y +
+                        (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
 
-            float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
+            float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x +
+                        (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
 
-            float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x + (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y + (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
+            float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x +
+                        (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y +
+                        (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
 
             float atx = -b5 * coeff.x + c5 * coeff.y + b1 * coeff.z;
 
@@ -2051,7 +2097,7 @@ public:
         Vector2Eigen(transformCur, trans_local);
 
         // i2w = j2w * i2j;
-        Eigen::Matrix4f pose = trans_sum * trans_local;
+        Eigen::Matrix4f pose = trans_sum * trans_local.inverse();
 
         Eigen2Vector(pose, transformSum);
     }
