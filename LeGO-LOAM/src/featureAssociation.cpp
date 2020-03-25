@@ -79,6 +79,22 @@ void Eigen2Vector(Eigen::Matrix4f trans, float *v)
     v[5] = trans(2, 3);
 }
 
+void Eigen2Vector(Eigen::Matrix3f rot, Eigen::Vector3f pos, float *v)
+{
+    tf::Matrix3x3 m((double)rot(0, 0), (double)rot(0, 1), (double)rot(0, 2),
+                    (double)rot(1, 0), (double)rot(1, 1), (double)rot(1, 2),
+                    (double)rot(2, 0), (double)rot(2, 1), (double)rot(2, 2));
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    v[0] = (float)roll;
+    v[1] = (float)pitch;
+    v[2] = (float)yaw;
+    v[3] = pos[0];
+    v[4] = pos[1];
+    v[5] = pos[2];
+}
+
 class FeatureAssociation
 {
 
@@ -1227,38 +1243,38 @@ public:
         cv::Mat matX(3, 1, CV_32F, cv::Scalar::all(0));
 
         // 传统的旋转矩阵R=Rz*Ry*Rx来表示，是zyx的顺序
-        // 但是loam计算雅可比时采用了zxy的顺序，丧心病狂啊！！！
+        // 但是loam计算雅可比时采用了zxy旋转，然后求了逆，丧心病狂啊！！！
         // 参考https://zhuanlan.zhihu.com/p/57351961
         // 参考https://en.wikipedia.org/wiki/Euler_angles
 
-        /*
-        *            SxSySz+CyCz  SxSyCz-CySz   CxSy 
-        * Ry*Rx*Rz = CxSz         CxCz         -Sx
-        *            SxCySz-SyCz  SxCyCz+SySz   CxCy
+        /* laom里R的表示：是wikipedia里Rz*Rx*Ry的逆！！！！！！！！！！！！
+        *                   CyCz-SxSySz  CySz+SxSyCz  -CxSy 
+        * (Rz*Rx*Ry).inv = -CxSz         CxCz          Sx
+        *                   SyCz+SxCySz  SySz-SxCyCz   CxCy
         */
 
-        // cost fuction: w[-R(p-t)]+d=0，注意并不是w(Rp+t)+d=0!!!!!!
+        // cost fuction: w[-R.inv*(p-t)]+d=0，注意并不是w(Rp+t)+d=0!!!!!!
 
         // 雅可比：
         // 对rx：
-        //  CxSySz   CxSyCz  -SxSy
-        // -SxSz    -SxCz    -Cx
-        //  CxCySz   CxCyCz  -SxCy
+        // -CxSySz   CxSyCz   SxSy
+        //  SxSz    -SxCz     Cx
+        //  CxCySz  -CxCyCz  -SxCy
 
         // 对ry:
-        //  SxCySz-SyCz  SxCyCz+SySz   CxCy
+        // -SyCz-SxCySz -SySz+SxCyCz  -CxCy
         //  0            0             0
-        // -SxSySz-CyCz -SxSyCz+CySz  -CxSy
+        //  CyCz-SxSySz  CySz+SxSyCz  -CxSy
 
         // 对rz:
-        // SxSyCz-CySz -SxSySz-CyCz   0
-        // CxCz        -CxSz          0
-        // SxCyCz+SySz -SxCySz+SyCz   0
+        // -CySz-SxSyCz  CyCz-SxSySz   0
+        // -CxCz        -CxSz          0
+        // -SySz+SxCyCz  SyCz+SxCySz   0
 
         // 对t:
-        //  SxSySz+CyCz  SxSyCz-CySz   CxSy
-        //  CxSz         CxCz         -Sx
-        //  SxCySz-SyCz  SxCyCz+SySz   CxCy
+        //  CyCz-SxSySz  CySz+SxSyCz  -CxSy
+        // -CxSz         CxCz          Sx
+        //  SyCz+SxCySz  SySz-SxCyCz   CxCy
 
         float srx = sin(transformCur[0]);
         float crx = cos(transformCur[0]);
@@ -1285,7 +1301,7 @@ public:
         float b1 = -crz * sry - cry * srx * srz;
         float b2 = cry * crz * srx - sry * srz;
         float b5 = cry * crz - srx * sry * srz;
-        float b6 = cry * srz + crz * srx * sry;
+        float b6 = cry * srz + crz * srx * sry; // 跟公式比应该是：cry * srz + crz * srx * sry;
 
         float c1 = -b6;
         float c2 = b5;
@@ -1425,7 +1441,8 @@ public:
             Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
             Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
 
-            Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
+            Eigen::Vector3f Jr = -w.transpose() * local_transform_rot * SkewSymmetric(p) * right_info_mat;
+            // Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
             Eigen::Vector3f Jt = w.transpose();
 
             // d2: 点到平面的距离
@@ -1440,7 +1457,7 @@ public:
             // matA(i, 3) = Jt.x();
             // matA(i, 4) = Jt.y();
             // matA(i, 5) = Jt.z();
-            matB(i, 0) = -d2;
+            matB(i, 0) = -0.05 * d2;
             // printf("%d\n", i);
             // std::cout << matA << std::endl;
             // std::cout << matB << std::endl;
@@ -1453,7 +1470,7 @@ public:
         matAtB = matAt * matB;
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-        std::cout << "====surf===" << std::endl;
+        std::cout << "====surf " << iterCount << "===" << std::endl;
         // std::cout << "matA:\n"
         //           << matA << std::endl;
         // std::cout << "matB:\n"
@@ -1477,8 +1494,8 @@ public:
             matV = esolver.eigenvectors().real();
             matV2 = matV;
 
-            std::cout << "matE:\n"
-                      << matE.transpose() << std::endl;
+            // std::cout << "matE:\n"
+            //           << matE.transpose() << std::endl;
 
             isDegenerate = false;
             float eignThre[3] = {10, 10, 10};
@@ -1510,15 +1527,20 @@ public:
             matX = matP * matX2;
         }
 
-        std::cout << matX.transpose() << std::endl;
+        // std::cout << matX.transpose() << std::endl;
 
         // roll pitch z
         // transformCur[0] += matX(0, 0);
         // transformCur[1] += matX(1, 0);
         // transformCur[5] += matX(2, 0);
-        transformCur[0] -= matX(0, 0);
-        transformCur[1] -= matX(1, 0);
-        transformCur[5] -= matX(2, 0);
+        // transformCur[0] -= matX(0, 0);
+        // transformCur[1] -= matX(1, 0);
+        // transformCur[5] -= matX(2, 0);
+
+        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(-matX(0, 0), -matX(1, 0), 0));
+        local_transform_pos[2] += matX(2, 0);
+
+        Eigen2Vector(local_transform_rot, local_transform_pos, transformCur);
 
         for (int i = 0; i < 6; i++)
         {
@@ -1575,7 +1597,8 @@ public:
             Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
             Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
 
-            Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
+            Eigen::Vector3f Jr = -w.transpose() * local_transform_rot * SkewSymmetric(p) * right_info_mat;
+            // Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
             Eigen::Vector3f Jt = w.transpose();
 
             // d2: 点到直线的距离
@@ -1585,7 +1608,7 @@ public:
             matA(i, 0) = Jr.z();
             matA(i, 1) = Jt.x();
             matA(i, 2) = Jt.y();
-            matB(i, 0) = -d2;
+            matB(i, 0) = -0.05 * d2;
 
             // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
         }
@@ -1597,7 +1620,7 @@ public:
         matAtB = matAt * matB;
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-        std::cout << "====corner===" << std::endl;
+        std::cout << "====corner " << iterCount << "===" << std::endl;
         // std::cout << "matA:\n"
         //           << matA << std::endl;
         // std::cout << "matB:\n"
@@ -1655,9 +1678,15 @@ public:
         // transformCur[2] += matX(0, 0);
         // transformCur[3] += matX(1, 0);
         // transformCur[4] += matX(2, 0);
-        transformCur[2] -= matX(0, 0);
-        transformCur[3] -= matX(1, 0);
-        transformCur[4] -= matX(2, 0);
+        // transformCur[2] -= matX(0, 0);
+        // transformCur[3] -= matX(1, 0);
+        // transformCur[4] -= matX(2, 0);
+
+        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(0, 0, -matX(0, 0)));
+        local_transform_pos[0] -= matX(1, 0);
+        local_transform_pos[1] -= matX(2, 0);
+
+        Eigen2Vector(local_transform_rot, local_transform_pos, transformCur);
 
         for (int i = 0; i < 6; i++)
         {
@@ -2043,8 +2072,8 @@ public:
             if (calculateTransformationSurfX(iterCount1) == false)
                 break;
 
-            ROS_DEBUG("transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f",
-                      transformCur[0], transformCur[1], transformCur[2], transformCur[3], transformCur[4], transformCur[5]);
+            printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
         }
 
         for (int iterCount2 = 0; iterCount2 < 25; iterCount2++)
@@ -2059,8 +2088,8 @@ public:
                 continue;
             if (calculateTransformationCornerX(iterCount2) == false)
                 break;
-            ROS_DEBUG("transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f",
-                      transformCur[0], transformCur[1], transformCur[2], transformCur[3], transformCur[4], transformCur[5]);
+            printf("after corner transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
         }
     }
 
@@ -2098,6 +2127,7 @@ public:
 
         // i2w = j2w * i2j;
         Eigen::Matrix4f pose = trans_sum * trans_local.inverse();
+        // Eigen::Matrix4f pose = trans_sum * trans_local;
 
         Eigen2Vector(pose, transformSum);
     }
@@ -2214,6 +2244,9 @@ public:
         {
             return;
         }
+
+        printf("new cloud: %lf\n", timeNewSegmentedCloud);
+
         /**
         	1. Feature Extraction
         */
@@ -2248,11 +2281,16 @@ public:
     }
 };
 
+void test()
+{
+
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "lego_loam");
 
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
+    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
 
     ROS_INFO("\033[1;32m---->\033[0m Feature Association Started.");
 
