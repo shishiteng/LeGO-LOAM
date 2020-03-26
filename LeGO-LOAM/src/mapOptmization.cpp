@@ -972,7 +972,7 @@ public:
         Eigen::Affine3f correctionCameraFrame;
         correctionCameraFrame = icp.getFinalTransformation(); // get transformation in camera frame (because points are in camera frame)
         pcl::getTranslationAndEulerAngles(correctionCameraFrame, x, y, z, roll, pitch, yaw);
-        Eigen::Affine3f correctionLidarFrame = pcl::getTransformation(z, x, y, yaw, roll, pitch);
+        Eigen::Affine3f correctionLidarFrame = pcl::getTransformation(x, y, z, roll, pitch, yaw);
         // transform from world origin to wrong pose
         Eigen::Affine3f tWrong = pclPointToAffine3fCameraToLidar(cloudKeyPoses6D->points[latestFrameIDLoopCloure]);
         // transform from world origin to corrected pose
@@ -994,6 +994,8 @@ public:
         gtSAMgraph.resize(0);
 
         aLoopIsClosed = true;
+
+        ROS_WARN("loop closure finished.");
     }
 
     Pose3 pclPointTogtsamPose3(PointTypePose thisPoint)
