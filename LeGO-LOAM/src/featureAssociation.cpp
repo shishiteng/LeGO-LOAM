@@ -34,67 +34,6 @@
 
 #include "utility.h"
 
-bool isinvalid(PointType p)
-{
-    return (isnan(p.x) || isinf(p.x) ||
-            isnan(p.y) || isinf(p.y) ||
-            isnan(p.z) || isinf(p.z));
-}
-
-void Vector2Eigen(float *v, Eigen::Matrix3f &rot, Eigen::Vector3f &pos)
-{
-    tf::Matrix3x3 m;
-    m.setRPY((double)v[0], (double)v[1], (double)v[2]);
-    rot << m[0][0], m[0][1], m[0][2],
-        m[1][0], m[1][1], m[1][2],
-        m[2][0], m[2][1], m[2][2];
-
-    pos = Eigen::Vector3f(v[3], v[4], v[5]);
-}
-
-void Vector2Eigen(float *v, Eigen::Matrix4f &trans)
-{
-    Eigen::Matrix3f rot;
-    Eigen::Vector3f pos;
-    Vector2Eigen(v, rot, pos);
-
-    trans = Eigen::Matrix4f::Identity();
-    trans.block(0, 0, 3, 3) = rot;
-    trans.block(0, 3, 3, 1) = pos;
-}
-
-void Eigen2Vector(Eigen::Matrix4f trans, float *v)
-{
-    tf::Matrix3x3 m((double)trans(0, 0), (double)trans(0, 1), (double)trans(0, 2),
-                    (double)trans(1, 0), (double)trans(1, 1), (double)trans(1, 2),
-                    (double)trans(2, 0), (double)trans(2, 1), (double)trans(2, 2));
-    double roll, pitch, yaw;
-    m.getRPY(roll, pitch, yaw);
-
-    v[0] = (float)roll;
-    v[1] = (float)pitch;
-    v[2] = (float)yaw;
-    v[3] = trans(0, 3);
-    v[4] = trans(1, 3);
-    v[5] = trans(2, 3);
-}
-
-void Eigen2Vector(Eigen::Matrix3f rot, Eigen::Vector3f pos, float *v)
-{
-    tf::Matrix3x3 m((double)rot(0, 0), (double)rot(0, 1), (double)rot(0, 2),
-                    (double)rot(1, 0), (double)rot(1, 1), (double)rot(1, 2),
-                    (double)rot(2, 0), (double)rot(2, 1), (double)rot(2, 2));
-    double roll, pitch, yaw;
-    m.getRPY(roll, pitch, yaw);
-
-    v[0] = (float)roll;
-    v[1] = (float)pitch;
-    v[2] = (float)yaw;
-    v[3] = pos[0];
-    v[4] = pos[1];
-    v[5] = pos[2];
-}
-
 class FeatureAssociation
 {
 
@@ -1417,10 +1356,10 @@ public:
         Eigen::Vector3f local_transform_pos;
         Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
 
-        std::cout << "local_transform_rot:\n"
-                  << local_transform_rot << std::endl;
-        std::cout << "local_transform_pos:\n"
-                  << local_transform_pos.transpose() << std::endl;
+        // std::cout << "local_transform_rot:\n"
+        //           << local_transform_rot << std::endl;
+        // std::cout << "local_transform_pos:\n"
+        //           << local_transform_pos.transpose() << std::endl;
 
         // cost function:w(R.inv*(p-t))+d=0
         for (int i = 0; i < pointSelNum; i++)
@@ -1429,7 +1368,7 @@ public:
             PointType coeff = coeffSel->points[i];
             if (isinvalid(pointOri) || isinvalid(coeff))
             {
-                std::cout << ".";
+                // std::cout << ".";
                 continue;
             }
 
@@ -1447,7 +1386,7 @@ public:
             matA(i, 3) = Jt.x();
             matA(i, 4) = Jt.y();
             matA(i, 5) = Jt.z();
-            matB(i, 0) = -0.1 * d2;
+            matB(i, 0) = -0.05 * d2;
         }
 
         // Ax=B,通解x=(At*A).inv*At*B
@@ -1457,18 +1396,18 @@ public:
         matAtB = matAt * matB;
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-        std::cout << "====surf " << iterCount << "===" << std::endl;
-        // std::cout << "matA:\n"
-        //           << matA << std::endl;
-        // std::cout << "matB:\n"
-        //           << matB << std::endl;
-        std::cout << "matAtA:\n"
-                  << matAtA << std::endl;
-        std::cout << "matAtB:\n"
-                  << matAtB.transpose() << std::endl;
-        std::cout << "matX:\n"
-                  << matX.transpose() << std::endl;
-        std::cout << "=======" << std::endl;
+        // std::cout << "====surf " << iterCount << "===" << std::endl;
+        // // std::cout << "matA:\n"
+        // //           << matA << std::endl;
+        // // std::cout << "matB:\n"
+        // //           << matB << std::endl;
+        // std::cout << "matAtA:\n"
+        //           << matAtA << std::endl;
+        // std::cout << "matAtB:\n"
+        //           << matAtB.transpose() << std::endl;
+        // std::cout << "matX:\n"
+        //           << matX.transpose() << std::endl;
+        // std::cout << "=======" << std::endl;
 
         if (iterCount == 0)
         {
@@ -1536,7 +1475,7 @@ public:
 
         if (deltaR < 0.1 && deltaT < 0.1)
         {
-            printf("surf converge: iter %d\n", iterCount);
+            // printf("surf converge: iter %d\n", iterCount);
             return false;
         }
 
@@ -1565,10 +1504,10 @@ public:
         Eigen::Vector3f local_transform_pos;
         Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
 
-        std::cout << "local_transform_rot:\n"
-                  << local_transform_rot << std::endl;
-        std::cout << "local_transform_pos:\n"
-                  << local_transform_pos.transpose() << std::endl;
+        // std::cout << "local_transform_rot:\n"
+        //           << local_transform_rot << std::endl;
+        // std::cout << "local_transform_pos:\n"
+        //           << local_transform_pos.transpose() << std::endl;
 
         // cost function:w(R.inv*(p-t))+d=0
         for (int i = 0; i < pointSelNum; i++)
@@ -1577,7 +1516,7 @@ public:
             PointType coeff = coeffSel->points[i];
             if (isinvalid(pointOri) || isinvalid(coeff))
             {
-                std::cout << ".";
+                // std::cout << ".";
                 continue;
             }
 
@@ -1600,7 +1539,7 @@ public:
             // matA(i, 3) = Jt.x();
             // matA(i, 4) = Jt.y();
             // matA(i, 5) = Jt.z();
-            matB(i, 0) = -0.1 * d2;
+            matB(i, 0) = -0.05 * d2;
             // printf("%d\n", i);
             // std::cout << matA << std::endl;
             // std::cout << matB << std::endl;
@@ -1613,18 +1552,18 @@ public:
         matAtB = matAt * matB;
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-        std::cout << "====surf " << iterCount << "===" << std::endl;
-        // std::cout << "matA:\n"
-        //           << matA << std::endl;
-        // std::cout << "matB:\n"
-        //           << matB << std::endl;
-        std::cout << "matAtA:\n"
-                  << matAtA << std::endl;
-        std::cout << "matAtB:\n"
-                  << matAtB.transpose() << std::endl;
-        std::cout << "matX:\n"
-                  << matX.transpose() << std::endl;
-        std::cout << "=======" << std::endl;
+        // std::cout << "====surf " << iterCount << "===" << std::endl;
+        // // std::cout << "matA:\n"
+        // //           << matA << std::endl;
+        // // std::cout << "matB:\n"
+        // //           << matB << std::endl;
+        // std::cout << "matAtA:\n"
+        //           << matAtA << std::endl;
+        // std::cout << "matAtB:\n"
+        //           << matAtB.transpose() << std::endl;
+        // std::cout << "matX:\n"
+        //           << matX.transpose() << std::endl;
+        // std::cout << "=======" << std::endl;
 
         if (iterCount == 0)
         {
@@ -1673,13 +1612,6 @@ public:
         // std::cout << matX.transpose() << std::endl;
 
         // roll pitch z
-        // transformCur[0] += matX(0, 0);
-        // transformCur[1] += matX(1, 0);
-        // transformCur[5] += matX(2, 0);
-        // transformCur[0] -= matX(0, 0);
-        // transformCur[1] -= matX(1, 0);
-        // transformCur[5] -= matX(2, 0);
-
         local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(matX(0, 0), matX(1, 0), 0));
         local_transform_pos[2] += matX(2, 0);
 
@@ -1696,7 +1628,7 @@ public:
 
         if (deltaR < 0.1 && deltaT < 0.1)
         {
-            printf("surf converge: iter %d\n", iterCount);
+            // printf("surf converge: iter %d\n", iterCount);
             return false;
         }
 
@@ -1725,10 +1657,10 @@ public:
         Eigen::Vector3f local_transform_pos;
         Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
 
-        std::cout << "local_transform_rot:\n"
-                  << local_transform_rot << std::endl;
-        std::cout << "local_transform_pos:\n"
-                  << local_transform_pos.transpose() << std::endl;
+        // std::cout << "local_transform_rot:\n"
+        //           << local_transform_rot << std::endl;
+        // std::cout << "local_transform_pos:\n"
+        //           << local_transform_pos.transpose() << std::endl;
 
         for (int i = 0; i < pointSelNum; i++)
         {
@@ -1750,7 +1682,7 @@ public:
             matA(i, 0) = Jr.z();
             matA(i, 1) = Jt.x();
             matA(i, 2) = Jt.y();
-            matB(i, 0) = -0.1 * d2;
+            matB(i, 0) = -0.05 * d2;
 
             // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
         }
@@ -1762,18 +1694,18 @@ public:
         matAtB = matAt * matB;
         matX = matAtA.colPivHouseholderQr().solve(matAtB);
 
-        std::cout << "====corner " << iterCount << "===" << std::endl;
-        // std::cout << "matA:\n"
-        //           << matA << std::endl;
-        // std::cout << "matB:\n"
-        //           << matB << std::endl;
-        std::cout << "matAtA:\n"
-                  << matAtA << std::endl;
-        std::cout << "matAtB:\n"
-                  << matAtB.transpose() << std::endl;
-        std::cout << "matX:\n"
-                  << matX.transpose() << std::endl;
-        std::cout << "=======" << std::endl;
+        // std::cout << "====corner " << iterCount << "===" << std::endl;
+        // // std::cout << "matA:\n"
+        // //           << matA << std::endl;
+        // // std::cout << "matB:\n"
+        // //           << matB << std::endl;
+        // std::cout << "matAtA:\n"
+        //           << matAtA << std::endl;
+        // std::cout << "matAtB:\n"
+        //           << matAtB.transpose() << std::endl;
+        // std::cout << "matX:\n"
+        //           << matX.transpose() << std::endl;
+        // std::cout << "=======" << std::endl;
 
         if (iterCount == 0)
         {
@@ -1814,15 +1746,7 @@ public:
             matX = matP * matX2;
         }
 
-        std::cout << matX.transpose() << std::endl;
-
-        // yaw x y
-        // transformCur[2] += matX(0, 0);
-        // transformCur[3] += matX(1, 0);
-        // transformCur[4] += matX(2, 0);
-        // transformCur[2] -= matX(0, 0);
-        // transformCur[3] -= matX(1, 0);
-        // transformCur[4] -= matX(2, 0);
+        // std::cout << matX.transpose() << std::endl;
 
         local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(0, 0, matX(0, 0)));
         local_transform_pos[0] += matX(1, 0);
@@ -1842,7 +1766,7 @@ public:
 
         if (deltaR < 0.1 && deltaT < 0.1)
         {
-            printf("corner converge: iter %d\n", iterCount);
+            // printf("corner converge: iter %d\n", iterCount);
             return false;
         }
 
@@ -2215,8 +2139,8 @@ public:
             if (calculateTransformationSurfX(iterCount1) == false)
                 break;
 
-            printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
-                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
+            // printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+            //        transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
         }
 
         for (int iterCount2 = 0; iterCount2 < 25; iterCount2++)
@@ -2231,8 +2155,8 @@ public:
                 continue;
             if (calculateTransformationCornerX(iterCount2) == false)
                 break;
-            printf("after corner transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
-                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
+            // printf("after corner transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+            //        transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
         }
     }
 
@@ -2257,8 +2181,8 @@ public:
             if (calculateTransformationX(iterCount1) == false)
                 break;
 
-            printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
-                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
+            // printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+            //        transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
         }
     }
 
@@ -2294,8 +2218,8 @@ public:
         Vector2Eigen(transformSum, trans_sum);
         Vector2Eigen(transformCur, trans_local);
 
-        std::cout << "trans:\n"
-                  << trans_local << std::endl;
+        // std::cout << "trans:\n"
+        //           << trans_local << std::endl;
 
         // i2w = j2w * i2j;
         Eigen::Matrix4f pose = trans_sum * trans_local.inverse();
@@ -2330,9 +2254,9 @@ public:
         int cloudSize = outlierCloud->points.size();
         for (int i = 0; i < cloudSize; ++i)
         {
-            point.x = outlierCloud->points[i].y;
-            point.y = outlierCloud->points[i].z;
-            point.z = outlierCloud->points[i].x;
+            point.x = outlierCloud->points[i].x;
+            point.y = outlierCloud->points[i].y;
+            point.z = outlierCloud->points[i].z;
             point.intensity = outlierCloud->points[i].intensity;
             outlierCloud->points[i] = point;
         }
@@ -2417,7 +2341,7 @@ public:
             return;
         }
 
-        printf("new cloud: %lf\n", timeNewSegmentedCloud);
+        // printf("new cloud: %lf\n", timeNewSegmentedCloud);
 
         /**
         	1. Feature Extraction

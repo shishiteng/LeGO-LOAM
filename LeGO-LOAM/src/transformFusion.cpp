@@ -157,11 +157,11 @@ public:
 
         double roll, pitch, yaw;
         geometry_msgs::Quaternion geoQuat = laserOdometry->pose.pose.orientation;
-        tf::Matrix3x3(tf::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+        tf::Matrix3x3(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w)).getRPY(roll, pitch, yaw);
 
-        transformSum[0] = -pitch;
-        transformSum[1] = -yaw;
-        transformSum[2] = roll;
+        transformSum[0] = roll;
+        transformSum[1] = pitch;
+        transformSum[2] = yaw;
 
         transformSum[3] = laserOdometry->pose.pose.position.x;
         transformSum[4] = laserOdometry->pose.pose.position.y;
@@ -169,12 +169,12 @@ public:
 
         transformAssociateToMap();
 
-        geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformMapped[2], -transformMapped[0], -transformMapped[1]);
+        geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformMapped[0], transformMapped[1], transformMapped[2]);
 
         laserOdometry2.header.stamp = laserOdometry->header.stamp;
-        laserOdometry2.pose.pose.orientation.x = -geoQuat.y;
-        laserOdometry2.pose.pose.orientation.y = -geoQuat.z;
-        laserOdometry2.pose.pose.orientation.z = geoQuat.x;
+        laserOdometry2.pose.pose.orientation.x = geoQuat.x;
+        laserOdometry2.pose.pose.orientation.y = geoQuat.y;
+        laserOdometry2.pose.pose.orientation.z = geoQuat.z;
         laserOdometry2.pose.pose.orientation.w = geoQuat.w;
         laserOdometry2.pose.pose.position.x = transformMapped[3];
         laserOdometry2.pose.pose.position.y = transformMapped[4];
@@ -182,7 +182,7 @@ public:
         pubLaserOdometry2.publish(laserOdometry2);
 
         laserOdometryTrans2.stamp_ = laserOdometry->header.stamp;
-        laserOdometryTrans2.setRotation(tf::Quaternion(-geoQuat.y, -geoQuat.z, geoQuat.x, geoQuat.w));
+        laserOdometryTrans2.setRotation(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w));
         laserOdometryTrans2.setOrigin(tf::Vector3(transformMapped[3], transformMapped[4], transformMapped[5]));
         tfBroadcaster2.sendTransform(laserOdometryTrans2);
     }
@@ -191,11 +191,11 @@ public:
     {
         double roll, pitch, yaw;
         geometry_msgs::Quaternion geoQuat = odomAftMapped->pose.pose.orientation;
-        tf::Matrix3x3(tf::Quaternion(geoQuat.z, -geoQuat.x, -geoQuat.y, geoQuat.w)).getRPY(roll, pitch, yaw);
+        tf::Matrix3x3(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w)).getRPY(roll, pitch, yaw);
 
-        transformAftMapped[0] = -pitch;
-        transformAftMapped[1] = -yaw;
-        transformAftMapped[2] = roll;
+        transformAftMapped[0] = roll;
+        transformAftMapped[1] = pitch;
+        transformAftMapped[2] = yaw;
 
         transformAftMapped[3] = odomAftMapped->pose.pose.position.x;
         transformAftMapped[4] = odomAftMapped->pose.pose.position.y;

@@ -7,9 +7,7 @@ Panels:
         - /Global Options1
         - /TF1
         - /TF1/Frames1
-        - /ICP cloud1
-        - /Map Cloud1
-        - /Odometry1
+        - /Map Cloud1/Autocompute Value Bounds1
       Splitter Ratio: 0.49567100405693054
     Tree Height: 823
   - Class: rviz/Selection
@@ -28,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Trajectory
   - Class: rviz/Help
     Name: Help
 Preferences:
@@ -43,9 +41,17 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        aft_mapped:
+          Value: true
+        base_link:
+          Value: true
+        camera:
+          Value: true
         camera_init:
           Value: true
         laser_odom:
+          Value: true
+        map:
           Value: true
       Marker Scale: 10
       Name: TF
@@ -53,9 +59,12 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        camera_init:
-          laser_odom:
-            {}
+        map:
+          camera_init:
+            aft_mapped:
+              {}
+            laser_odom:
+              {}
       Update Interval: 0
       Value: true
     - Class: rviz/Axes
@@ -357,7 +366,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 22
+      Max Intensity: 356
       Min Color: 0; 0; 0
       Min Intensity: 0
       Name: Trajectory
@@ -435,14 +444,14 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 49.4300537109375
-        Min Value: -6.490318775177002
-        Value: true
-      Axis: Y
+        Max Value: 50
+        Min Value: -4.663000106811523
+        Value: false
+      Axis: Z
       Channel Name: intensity
       Class: rviz/PointCloud2
       Color: 255; 255; 255
-      Color Transformer: FlatColor
+      Color Transformer: AxisColor
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
@@ -545,25 +554,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 16.41059684753418
+      Distance: 202.0628662109375
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -1.2798205614089966
-        Y: 5.782529830932617
-        Z: -5.402206897735596
+        X: 33.57542037963867
+        Y: -1.8666958808898926
+        Z: -2.8768866062164307
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -1.4647964239120483
+      Pitch: 1.5697963237762451
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 1.635528802871704
+      Yaw: 3.105531692504883
     Saved: ~
 Window Geometry:
   Displays:

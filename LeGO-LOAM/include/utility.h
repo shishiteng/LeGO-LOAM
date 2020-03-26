@@ -179,4 +179,65 @@ inline Eigen::Quaternion<typename Derived::Scalar> DeltaQ(const Eigen::MatrixBas
   return dq;
 }
 
+bool isinvalid(PointType p)
+{
+    return (isnan(p.x) || isinf(p.x) ||
+            isnan(p.y) || isinf(p.y) ||
+            isnan(p.z) || isinf(p.z));
+}
+
+void Vector2Eigen(float *v, Eigen::Matrix3f &rot, Eigen::Vector3f &pos)
+{
+    tf::Matrix3x3 m;
+    m.setRPY((double)v[0], (double)v[1], (double)v[2]);
+    rot << m[0][0], m[0][1], m[0][2],
+        m[1][0], m[1][1], m[1][2],
+        m[2][0], m[2][1], m[2][2];
+
+    pos = Eigen::Vector3f(v[3], v[4], v[5]);
+}
+
+void Vector2Eigen(float *v, Eigen::Matrix4f &trans)
+{
+    Eigen::Matrix3f rot;
+    Eigen::Vector3f pos;
+    Vector2Eigen(v, rot, pos);
+
+    trans = Eigen::Matrix4f::Identity();
+    trans.block(0, 0, 3, 3) = rot;
+    trans.block(0, 3, 3, 1) = pos;
+}
+
+void Eigen2Vector(Eigen::Matrix4f trans, float *v)
+{
+    tf::Matrix3x3 m((double)trans(0, 0), (double)trans(0, 1), (double)trans(0, 2),
+                    (double)trans(1, 0), (double)trans(1, 1), (double)trans(1, 2),
+                    (double)trans(2, 0), (double)trans(2, 1), (double)trans(2, 2));
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    v[0] = (float)roll;
+    v[1] = (float)pitch;
+    v[2] = (float)yaw;
+    v[3] = trans(0, 3);
+    v[4] = trans(1, 3);
+    v[5] = trans(2, 3);
+}
+
+void Eigen2Vector(Eigen::Matrix3f rot, Eigen::Vector3f pos, float *v)
+{
+    tf::Matrix3x3 m((double)rot(0, 0), (double)rot(0, 1), (double)rot(0, 2),
+                    (double)rot(1, 0), (double)rot(1, 1), (double)rot(1, 2),
+                    (double)rot(2, 0), (double)rot(2, 1), (double)rot(2, 2));
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    v[0] = (float)roll;
+    v[1] = (float)pitch;
+    v[2] = (float)yaw;
+    v[3] = pos[0];
+    v[4] = pos[1];
+    v[5] = pos[2];
+}
+
 #endif
