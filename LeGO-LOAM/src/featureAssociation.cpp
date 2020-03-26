@@ -1253,7 +1253,7 @@ public:
         *                   SyCz+SxCySz  SySz-SxCyCz   CxCy
         */
 
-        // cost fuction: w[-R.inv*(p-t)]+d=0，注意并不是w(Rp+t)+d=0!!!!!!
+        // cost fuction: w[R.inv*(p-t)]+d=0，注意并不是w(Rp+t)+d=0!!!!!!
 
         // 雅可比：
         // 对rx：
@@ -1301,7 +1301,7 @@ public:
         float b1 = -crz * sry - cry * srx * srz;
         float b2 = cry * crz * srx - sry * srz;
         float b5 = cry * crz - srx * sry * srz;
-        float b6 = cry * srz + crz * srx * sry; // 跟公式比应该是：cry * srz + crz * srx * sry;
+        float b6 = cry * srz + crz * srx * sry;
 
         float c1 = -b6;
         float c2 = b5;
@@ -1401,6 +1401,148 @@ public:
         return true;
     }
 
+    bool calculateTransformationX(int iterCount)
+    {
+        int pointSelNum = laserCloudOri->points.size();
+
+        Eigen::Matrix<float, Eigen::Dynamic, 6> matA(pointSelNum, 6);
+        Eigen::Matrix<float, 6, Eigen::Dynamic> matAt(6, pointSelNum);
+        Eigen::Matrix<float, 6, 6> matAtA;
+        Eigen::VectorXf matB(pointSelNum);
+        Eigen::VectorXf matAtB;
+        Eigen::VectorXf matX;
+        Eigen::Matrix<float, 6, 6> matP;
+
+        Eigen::Matrix3f local_transform_rot;
+        Eigen::Vector3f local_transform_pos;
+        Vector2Eigen(transformCur, local_transform_rot, local_transform_pos);
+
+        std::cout << "local_transform_rot:\n"
+                  << local_transform_rot << std::endl;
+        std::cout << "local_transform_pos:\n"
+                  << local_transform_pos.transpose() << std::endl;
+
+        // cost function:w(R.inv*(p-t))+d=0
+        for (int i = 0; i < pointSelNum; i++)
+        {
+            PointType pointOri = laserCloudOri->points[i];
+            PointType coeff = coeffSel->points[i];
+            if (isinvalid(pointOri) || isinvalid(coeff))
+            {
+                std::cout << ".";
+                continue;
+            }
+
+            Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
+            Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
+
+            Eigen::Vector3f Jr = w.transpose() * SkewSymmetric(local_transform_rot.inverse() * p);
+            Eigen::Vector3f Jt = -w.transpose() * local_transform_rot.inverse();
+
+            float d2 = coeff.intensity;
+
+            matA(i, 0) = Jr.x();
+            matA(i, 1) = Jr.y();
+            matA(i, 2) = Jr.z();
+            matA(i, 3) = Jt.x();
+            matA(i, 4) = Jt.y();
+            matA(i, 5) = Jt.z();
+            matB(i, 0) = -0.1 * d2;
+        }
+
+        // Ax=B,通解x=(At*A).inv*At*B
+        // At*A*x=At*B
+        matAt = matA.transpose();
+        matAtA = matAt * matA;
+        matAtB = matAt * matB;
+        matX = matAtA.colPivHouseholderQr().solve(matAtB);
+
+        std::cout << "====surf " << iterCount << "===" << std::endl;
+        // std::cout << "matA:\n"
+        //           << matA << std::endl;
+        // std::cout << "matB:\n"
+        //           << matB << std::endl;
+        std::cout << "matAtA:\n"
+                  << matAtA << std::endl;
+        std::cout << "matAtB:\n"
+                  << matAtB.transpose() << std::endl;
+        std::cout << "matX:\n"
+                  << matX.transpose() << std::endl;
+        std::cout << "=======" << std::endl;
+
+        if (iterCount == 0)
+        {
+            Eigen::Matrix<float, 1, 6> matE;
+            Eigen::Matrix<float, 6, 6> matV;
+            Eigen::Matrix<float, 6, 6> matV2;
+
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix<float, 6, 6>> esolver(matAtA);
+            matE = esolver.eigenvalues().real();
+            matV = esolver.eigenvectors().real();
+            matV2 = matV;
+
+            // std::cout << "matE:\n"
+            //           << matE.transpose() << std::endl;
+
+            isDegenerate = false;
+            float eignThre[6] = {10, 10, 10, 10, 10, 10};
+            // float eignThre[3] = {100, 100, 100};
+            for (int i = 5; i >= 0; i--)
+            {
+                if (matE(0, i) < eignThre[i])
+                {
+                    for (int j = 0; j < 6; j++)
+                    {
+                        matV2(i, j) = 0;
+                    }
+                    isDegenerate = true;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            matP = matV2 * matV.inverse();
+            // matP = matV.inverse() * matV2; // 原来的i是从2开始迭代的
+            // matP = mat_V2 * mat_V.inverse();// lio mapping里是这样的！！！！
+        }
+
+        if (isDegenerate)
+        {
+            ROS_WARN("surf degenerate");
+            Eigen::Matrix<float, 6, 1> matX2(matX);
+            matX = matP * matX2;
+        }
+
+        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(matX(0, 0), matX(1, 0), matX(2, 0)));
+        local_transform_pos[0] += matX(3, 0);
+        local_transform_pos[1] += matX(4, 0);
+        local_transform_pos[2] += matX(5, 0);
+
+        Eigen2Vector(local_transform_rot, local_transform_pos, transformCur);
+
+        for (int i = 0; i < 6; i++)
+        {
+            if (isnan(transformCur[i]))
+                transformCur[i] = 0;
+        }
+
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) +
+                            pow(rad2deg(matX(1, 0)), 2) +
+                            pow(rad2deg(matX(2, 0)), 2));
+        float deltaT = sqrt(pow(matX(3, 0) * 100, 2) +
+                            pow(matX(4, 0) * 100, 2) +
+                            pow(matX(5, 0) * 100, 2));
+
+        if (deltaR < 0.1 && deltaT < 0.1)
+        {
+            printf("surf converge: iter %d\n", iterCount);
+            return false;
+        }
+
+        return true;
+    }
+
     bool calculateTransformationSurfX(int iterCount)
     {
         int pointSelNum = laserCloudOri->points.size();
@@ -1417,7 +1559,7 @@ public:
         right_info_mat.setZero();
         right_info_mat(0, 0) = 1.0;
         right_info_mat(1, 1) = 1.0;
-        right_info_mat(2, 2) = 0.0;
+        right_info_mat(2, 2) = 1.0;
 
         Eigen::Matrix3f local_transform_rot;
         Eigen::Vector3f local_transform_pos;
@@ -1428,6 +1570,7 @@ public:
         std::cout << "local_transform_pos:\n"
                   << local_transform_pos.transpose() << std::endl;
 
+        // cost function:w(R.inv*(p-t))+d=0
         for (int i = 0; i < pointSelNum; i++)
         {
             PointType pointOri = laserCloudOri->points[i];
@@ -1441,9 +1584,9 @@ public:
             Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
             Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
 
-            Eigen::Vector3f Jr = -w.transpose() * local_transform_rot * SkewSymmetric(p) * right_info_mat;
-            // Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
-            Eigen::Vector3f Jt = w.transpose();
+            // Eigen::Vector3f Jr = -w.transpose() * local_transform_rot * SkewSymmetric(p) * right_info_mat;
+            Eigen::Vector3f Jr = w.transpose() * SkewSymmetric(local_transform_rot.inverse() * p);
+            Eigen::Vector3f Jt = -w.transpose() * local_transform_rot.inverse();
 
             // d2: 点到平面的距离
             // float d2 = w.transpose() * (local_transform_rot * p + local_transform_pos) + coeff.intensity;
@@ -1457,7 +1600,7 @@ public:
             // matA(i, 3) = Jt.x();
             // matA(i, 4) = Jt.y();
             // matA(i, 5) = Jt.z();
-            matB(i, 0) = -0.05 * d2;
+            matB(i, 0) = -0.1 * d2;
             // printf("%d\n", i);
             // std::cout << matA << std::endl;
             // std::cout << matB << std::endl;
@@ -1515,7 +1658,7 @@ public:
                     break;
                 }
             }
-            matP = matV * matV2.inverse();
+            matP = matV2 * matV.inverse();
             // matP = matV.inverse() * matV2; // 原来的i是从2开始迭代的
             // matP = mat_V2 * mat_V.inverse();// lio mapping里是这样的！！！！
         }
@@ -1537,7 +1680,7 @@ public:
         // transformCur[1] -= matX(1, 0);
         // transformCur[5] -= matX(2, 0);
 
-        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(-matX(0, 0), -matX(1, 0), 0));
+        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(matX(0, 0), matX(1, 0), 0));
         local_transform_pos[2] += matX(2, 0);
 
         Eigen2Vector(local_transform_rot, local_transform_pos, transformCur);
@@ -1574,8 +1717,8 @@ public:
 
         Eigen::Matrix3f right_info_mat;
         right_info_mat.setZero();
-        right_info_mat(0, 0) = 0.0;
-        right_info_mat(1, 1) = 0.0;
+        right_info_mat(0, 0) = 1.0;
+        right_info_mat(1, 1) = 1.0;
         right_info_mat(2, 2) = 1.0;
 
         Eigen::Matrix3f local_transform_rot;
@@ -1597,9 +1740,8 @@ public:
             Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
             Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
 
-            Eigen::Vector3f Jr = -w.transpose() * local_transform_rot * SkewSymmetric(p) * right_info_mat;
-            // Eigen::Vector3f Jr = -w.transpose() * SkewSymmetric(local_transform_rot * p) * right_info_mat;
-            Eigen::Vector3f Jt = w.transpose();
+            Eigen::Vector3f Jr = w.transpose() * SkewSymmetric(local_transform_rot.inverse() * p);
+            Eigen::Vector3f Jt = -w.transpose() * local_transform_rot.inverse();
 
             // d2: 点到直线的距离
             // float d2 = w.transpose() * (local_transform_rot * p + local_transform_pos) + coeff.intensity;
@@ -1608,7 +1750,7 @@ public:
             matA(i, 0) = Jr.z();
             matA(i, 1) = Jt.x();
             matA(i, 2) = Jt.y();
-            matB(i, 0) = -0.05 * d2;
+            matB(i, 0) = -0.1 * d2;
 
             // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
         }
@@ -1662,7 +1804,7 @@ public:
                     break;
                 }
             }
-            matP = matV * matV2.inverse();
+            matP = matV2 * matV.inverse();
         }
 
         if (isDegenerate)
@@ -1682,9 +1824,9 @@ public:
         // transformCur[3] -= matX(1, 0);
         // transformCur[4] -= matX(2, 0);
 
-        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(0, 0, -matX(0, 0)));
-        local_transform_pos[0] -= matX(1, 0);
-        local_transform_pos[1] -= matX(2, 0);
+        local_transform_rot = local_transform_rot * DeltaQ(Eigen::Vector3f(0, 0, matX(0, 0)));
+        local_transform_pos[0] += matX(1, 0);
+        local_transform_pos[1] += matX(2, 0);
 
         Eigen2Vector(local_transform_rot, local_transform_pos, transformCur);
 
@@ -1694,8 +1836,9 @@ public:
                 transformCur[i] = 0;
         }
 
-        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) + pow(rad2deg(matX(1, 0)), 2));
-        float deltaT = sqrt(pow(matX(2, 0) * 100, 2));
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2));
+        float deltaT = sqrt(pow(matX(1, 0) * 100, 2) +
+                            pow(matX(2, 0) * 100, 2));
 
         if (deltaR < 0.1 && deltaT < 0.1)
         {
@@ -2045,12 +2188,12 @@ public:
         //     transformCur[5] -= imuVeloFromStartZ * scanPeriod;
         // }
 
-        transformCur[0] = 0;
-        transformCur[1] = 0;
-        transformCur[2] = 0;
-        transformCur[3] = 0;
-        transformCur[4] = 0;
-        transformCur[5] = 0;
+        // transformCur[0] = 0;
+        // transformCur[1] = 0;
+        // transformCur[2] = 0;
+        // transformCur[3] = 0;
+        // transformCur[4] = 0;
+        // transformCur[5] = 0;
     }
 
     void updateTransformation()
@@ -2093,6 +2236,32 @@ public:
         }
     }
 
+    void updateTransformationX()
+    {
+        if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100)
+            return;
+
+        for (int iterCount1 = 0; iterCount1 < 25; iterCount1++)
+        {
+            laserCloudOri->clear();
+            coeffSel->clear();
+
+            findCorrespondingSurfFeatures(iterCount1);
+
+            findCorrespondingCornerFeatures(iterCount1);
+
+            if (laserCloudOri->points.size() < 10)
+                continue;
+
+            ROS_DEBUG("iter_%d surf features: %u", iterCount1, laserCloudOri->points.size());
+            if (calculateTransformationX(iterCount1) == false)
+                break;
+
+            printf("after surf transformCur: %.4f %.4f %.4f | %.4f %.4f %.4f\n",
+                   transformCur[0] * 57.3, transformCur[1] * 57.3, transformCur[2] * 57.3, transformCur[3], transformCur[4], transformCur[5]);
+        }
+    }
+
     void integrateTransformation()
     {
         // float rx, ry, rz, tx, ty, tz;
@@ -2124,6 +2293,9 @@ public:
         Eigen::Matrix4f trans_sum, trans_local;
         Vector2Eigen(transformSum, trans_sum);
         Vector2Eigen(transformCur, trans_local);
+
+        std::cout << "trans:\n"
+                  << trans_local << std::endl;
 
         // i2w = j2w * i2j;
         Eigen::Matrix4f pose = trans_sum * trans_local.inverse();
@@ -2283,7 +2455,6 @@ public:
 
 void test()
 {
-
 }
 
 int main(int argc, char **argv)
