@@ -229,6 +229,8 @@ public:
         subLaserCloudCornerLast = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_corner_last", 2, &mapOptimization::laserCloudCornerLastHandler, this);
         subLaserCloudSurfLast = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 2, &mapOptimization::laserCloudSurfLastHandler, this);
         subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
+        // subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
+        
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &mapOptimization::laserOdometryHandler, this);
         subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &mapOptimization::imuHandler, this);
 
@@ -1314,6 +1316,14 @@ public:
 
                     float s = 1 - 0.9 * fabs(pd2) / sqrt(sqrt(pointSel.x * pointSel.x + pointSel.y * pointSel.y + pointSel.z * pointSel.z));
 
+                    // if (pd2 < 0)
+                    // {
+                    //     pa = -pa;
+                    //     pb = -pb;
+                    //     pc = -pc;
+                    //     pd = -pd;
+                    // }
+
                     coeff.x = s * pa;
                     coeff.y = s * pb;
                     coeff.z = s * pc;
@@ -1533,11 +1543,14 @@ public:
         if (isDegenerate)
         {
             Eigen::Matrix<float, 6, 1> matX2(matX);
-            matX = matP_ * matX2;
+            // matX = matP_ * matX2;
         }
 
-        transform_tobe_mapped_rot = transform_tobe_mapped_rot * DeltaQ(Eigen::Vector3f(matX(0, 0), matX(1, 0), matX(2, 0)));
-        Eigen2Vector(transform_tobe_mapped_rot, transform_tobe_mapped_pos, transformTobeMapped);
+        // transform_tobe_mapped_rot = transform_tobe_mapped_rot * DeltaQ(Eigen::Vector3f(matX(0, 0), matX(1, 0), matX(2, 0)));
+        // Eigen2Vector(transform_tobe_mapped_rot, transform_tobe_mapped_pos, transformTobeMapped);
+        transformTobeMapped[0] += matX(0, 0);
+        transformTobeMapped[1] += matX(1, 0);
+        transformTobeMapped[2] += matX(2, 0);
         transformTobeMapped[3] += matX(3, 0);
         transformTobeMapped[4] += matX(4, 0);
         transformTobeMapped[5] += matX(5, 0);

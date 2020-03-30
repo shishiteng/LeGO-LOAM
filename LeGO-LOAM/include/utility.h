@@ -165,18 +165,19 @@ inline Eigen::Matrix<typename Derived::Scalar, 3, 3> SkewSymmetric(const Eigen::
     return m;
 }
 
-template<typename Derived>
-inline Eigen::Quaternion<typename Derived::Scalar> DeltaQ(const Eigen::MatrixBase<Derived> &theta) {
-  typedef typename Derived::Scalar Scalar_t;
+template <typename Derived>
+inline Eigen::Quaternion<typename Derived::Scalar> DeltaQ(const Eigen::MatrixBase<Derived> &theta)
+{
+    typedef typename Derived::Scalar Scalar_t;
 
-  Eigen::Quaternion<Scalar_t> dq;
-  Eigen::Matrix<Scalar_t, 3, 1> half_theta = theta;
-  half_theta /= static_cast<Scalar_t>(2.0);
-  dq.w() = static_cast<Scalar_t>(1.0);
-  dq.x() = half_theta.x();
-  dq.y() = half_theta.y();
-  dq.z() = half_theta.z();
-  return dq;
+    Eigen::Quaternion<Scalar_t> dq;
+    Eigen::Matrix<Scalar_t, 3, 1> half_theta = theta;
+    half_theta /= static_cast<Scalar_t>(2.0);
+    dq.w() = static_cast<Scalar_t>(1.0);
+    dq.x() = half_theta.x();
+    dq.y() = half_theta.y();
+    dq.z() = half_theta.z();
+    return dq;
 }
 
 bool isinvalid(PointType p)
@@ -190,10 +191,10 @@ void Vector2Eigen(float *v, Eigen::Matrix3f &rot, Eigen::Vector3f &pos)
 {
     tf::Matrix3x3 m;
     m.setRPY((double)v[0], (double)v[1], (double)v[2]);
+
     rot << m[0][0], m[0][1], m[0][2],
         m[1][0], m[1][1], m[1][2],
         m[2][0], m[2][1], m[2][2];
-
     pos = Eigen::Vector3f(v[3], v[4], v[5]);
 }
 

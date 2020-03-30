@@ -92,6 +92,7 @@ public:
 
     void transformAssociateToMap()
     {
+        // 有问题
         float x1 = cos(transformSum[1]) * (transformBefMapped[3] - transformSum[3]) - sin(transformSum[1]) * (transformBefMapped[5] - transformSum[5]);
         float y1 = transformBefMapped[4] - transformSum[4];
         float z1 = sin(transformSum[1]) * (transformBefMapped[3] - transformSum[3]) + cos(transformSum[1]) * (transformBefMapped[5] - transformSum[5]);
@@ -149,6 +150,25 @@ public:
         transformMapped[3] = transformAftMapped[3] - (cos(transformMapped[1]) * x2 + sin(transformMapped[1]) * z2);
         transformMapped[4] = transformAftMapped[4] - y2;
         transformMapped[5] = transformAftMapped[5] - (-sin(transformMapped[1]) * x2 + cos(transformMapped[1]) * z2);
+    }
+
+
+    void transformAssociateToMapX()
+    {
+        // Transform transform_incre(transform_bef_mapped_.inverse() * transform_sum_.transform());
+        // transform_tobe_mapped_ = transform_tobe_mapped_ * transform_incre;
+
+        // Eigen::Matrix4f transform_incre, transform_bef_mapped, transform_sum, transform_mapped;
+
+        // Vector2Eigen(transformSum, transform_sum);
+        // Vector2Eigen(transformBefMapped, transform_bef_mapped);
+        // Vector2Eigen(transformMapped, transform_mapped);
+
+        // // j2i in i = w2i *j2w
+        // transform_incre = transform_bef_mapped.inverse() * transform_sum;
+        // transform_mapped = transform_mapped * transform_incre;
+
+        // Eigen2Vector(transform_mapped, transformMapped);
     }
 
     void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry)
