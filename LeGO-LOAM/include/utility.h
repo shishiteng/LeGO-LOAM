@@ -45,7 +45,10 @@
 #include <thread>
 #include <mutex>
 
-#define PI 3.14159265
+#include <chrono>
+#include <iostream>
+
+#define PI 3.1415926535898
 
 using namespace std;
 
@@ -195,6 +198,7 @@ void Vector2Eigen(float *v, Eigen::Matrix3f &rot, Eigen::Vector3f &pos)
     rot << m[0][0], m[0][1], m[0][2],
         m[1][0], m[1][1], m[1][2],
         m[2][0], m[2][1], m[2][2];
+    // rot.normalize();
     pos = Eigen::Vector3f(v[3], v[4], v[5]);
 }
 
@@ -240,5 +244,35 @@ void Eigen2Vector(Eigen::Matrix3f rot, Eigen::Vector3f pos, float *v)
     v[4] = pos[1];
     v[5] = pos[2];
 }
+
+class TicToc
+{
+public:
+    TicToc()
+    {
+        Tic();
+    }
+
+    void Tic()
+    {
+        start_ = std::chrono::system_clock::now();
+    }
+
+    double Toc()
+    {
+        end_ = std::chrono::system_clock::now();
+        elapsed_seconds_ = end_ - start_;
+        return elapsed_seconds_.count() * 1000;
+    }
+
+    double GetLastStop()
+    {
+        return elapsed_seconds_.count() * 1000;
+    }
+
+private:
+    std::chrono::time_point<std::chrono::system_clock> start_, end_;
+    std::chrono::duration<double> elapsed_seconds_;
+};
 
 #endif

@@ -556,12 +556,14 @@ public:
                     ori -= 2 * M_PI;
             }
 
-            float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
-            point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
+            // float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
+            // printf("ori_%lf start_%lf diff_%lf\n", ori, segInfo.startOrientation, segInfo.orientationDiff);
+            // point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
 
             // reltime要重新计算
-            // float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
-            // point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
+            float relTime = (ori - segInfo.startOrientation) / (2 * PI) * scanPeriod;
+            point.intensity = int(segmentedCloud->points[i].intensity) + relTime;
+            // printf("%lf start_%lf\n", point.intensity, segInfo.startOrientation);
 
             // segmentedCloud->points[i] = point;
         }
@@ -803,7 +805,7 @@ public:
     void TransformToStart(PointType const *const pi, PointType *const po)
     {
         float s = 10 * (pi->intensity - int(pi->intensity));
-#if 1
+#if 0
         float trans[6];
         trans[0] = s * transformCur[0];
         trans[1] = s * transformCur[1];
@@ -816,6 +818,8 @@ public:
         Eigen::Vector3f trans_local_pos;
         Vector2Eigen(trans, trans_local_rot, trans_local_pos);
 
+        // 激光雷达点的畸变时刻测距是准的，不准的是角度，所以应该先补偿角度，再补偿平移
+
         // transformCur代表从当前帧到上一帧的变换，以当前帧为参考
         Eigen::Vector3f p0(pi->x, pi->y, pi->z);
         Eigen::Vector3f p1 = trans_local_rot.inverse() * (p0 - trans_local_pos);
@@ -825,6 +829,11 @@ public:
         po->y = p1[1];
         po->z = p1[2];
         po->intensity = pi->intensity;
+
+        // po->x = pi->x;
+        // po->y = pi->y;
+        // po->z = pi->z;
+        // po->intensity = pi->intensity;
 #else
         float rx = s * transformCur[0];
         float ry = s * transformCur[1];
@@ -851,6 +860,7 @@ public:
 
     void TransformToEnd(PointType const *const pi, PointType *const po)
     {
+#if 0
         float s = 10 * (pi->intensity - int(pi->intensity));
 
         // TransformToStart(pi, po);
@@ -873,73 +883,10 @@ public:
         po->y = point[1];
         po->z = point[2];
         po->intensity = int(pi->intensity);
-
+#else
+        *po = *pi;
+#endif
         return;
-
-        // float s = 10 * (pi->intensity - int(pi->intensity));
-
-        // float rx = s * transformCur[0];
-        // float ry = s * transformCur[1];
-        // float rz = s * transformCur[2];
-        // float tx = s * transformCur[3];
-        // float ty = s * transformCur[4];
-        // float tz = s * transformCur[5];
-
-        // float x1 = cos(rz) * (pi->x - tx) + sin(rz) * (pi->y - ty);
-        // float y1 = -sin(rz) * (pi->x - tx) + cos(rz) * (pi->y - ty);
-        // float z1 = (pi->z - tz);
-
-        // float x2 = x1;
-        // float y2 = cos(rx) * y1 + sin(rx) * z1;
-        // float z2 = -sin(rx) * y1 + cos(rx) * z1;
-
-        // float x3 = cos(ry) * x2 - sin(ry) * z2;
-        // float y3 = y2;
-        // float z3 = sin(ry) * x2 + cos(ry) * z2;
-
-        // rx = transformCur[0];
-        // ry = transformCur[1];
-        // rz = transformCur[2];
-        // tx = transformCur[3];
-        // ty = transformCur[4];
-        // tz = transformCur[5];
-
-        // float x4 = cos(ry) * x3 + sin(ry) * z3;
-        // float y4 = y3;
-        // float z4 = -sin(ry) * x3 + cos(ry) * z3;
-
-        // float x5 = x4;
-        // float y5 = cos(rx) * y4 - sin(rx) * z4;
-        // float z5 = sin(rx) * y4 + cos(rx) * z4;
-
-        // float x6 = cos(rz) * x5 - sin(rz) * y5 + tx;
-        // float y6 = sin(rz) * x5 + cos(rz) * y5 + ty;
-        // float z6 = z5 + tz;
-
-        // float x7 = cosImuRollStart * (x6 - imuShiftFromStartX) - sinImuRollStart * (y6 - imuShiftFromStartY);
-        // float y7 = sinImuRollStart * (x6 - imuShiftFromStartX) + cosImuRollStart * (y6 - imuShiftFromStartY);
-        // float z7 = z6 - imuShiftFromStartZ;
-
-        // float x8 = x7;
-        // float y8 = cosImuPitchStart * y7 - sinImuPitchStart * z7;
-        // float z8 = sinImuPitchStart * y7 + cosImuPitchStart * z7;
-
-        // float x9 = cosImuYawStart * x8 + sinImuYawStart * z8;
-        // float y9 = y8;
-        // float z9 = -sinImuYawStart * x8 + cosImuYawStart * z8;
-
-        // float x10 = cos(imuYawLast) * x9 - sin(imuYawLast) * z9;
-        // float y10 = y9;
-        // float z10 = sin(imuYawLast) * x9 + cos(imuYawLast) * z9;
-
-        // float x11 = x10;
-        // float y11 = cos(imuPitchLast) * y10 + sin(imuPitchLast) * z10;
-        // float z11 = -sin(imuPitchLast) * y10 + cos(imuPitchLast) * z10;
-
-        // po->x = cos(imuRollLast) * x11 + sin(imuRollLast) * y11;
-        // po->y = -sin(imuRollLast) * x11 + cos(imuRollLast) * y11;
-        // po->z = z11;
-        // po->intensity = int(pi->intensity);
     }
 
     void PluginIMURotation(float bcx, float bcy, float bcz, float blx, float bly, float blz,
@@ -1025,7 +972,8 @@ public:
                     int closestPointScan = int(laserCloudCornerLast->points[closestPointInd].intensity);
 
                     float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist;
-                    for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++)
+                    // for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++)
+                    for (int j = closestPointInd + 1; j < laserCloudCornerLastNum; j++)
                     {
                         if (int(laserCloudCornerLast->points[j].intensity) > closestPointScan + 2.5)
                         {
@@ -1116,8 +1064,11 @@ public:
                     coeff.z = s * lc;
                     coeff.intensity = s * ld2;
 
-                    laserCloudOri->push_back(cornerPointsSharp->points[i]);
-                    coeffSel->push_back(coeff);
+                    if (s > 0.1 && ld2 != 0)
+                    {
+                        laserCloudOri->push_back(cornerPointsSharp->points[i]);
+                        coeffSel->push_back(coeff);
+                    }
 
                     // printf(">>>>>>>>\n");
                     // printf("x0: %lf %lf %lf\n", x0, y0, z0);
@@ -1154,7 +1105,8 @@ public:
                     int closestPointScan = int(laserCloudSurfLast->points[closestPointInd].intensity);
 
                     float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist, minPointSqDis3 = nearestFeatureSearchSqDist;
-                    for (int j = closestPointInd + 1; j < surfPointsFlatNum; j++)
+                    // for (int j = closestPointInd + 1; j < surfPointsFlatNum; j++)
+                    for (int j = closestPointInd + 1; j < laserCloudSurfLastNum; j++)
                     {
                         if (int(laserCloudSurfLast->points[j].intensity) > closestPointScan + 2.5)
                         {
@@ -1599,6 +1551,16 @@ public:
             matX = matP * matX2;
         }
 
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) +
+                            pow(rad2deg(matX(1, 0)), 2));
+        float deltaT = sqrt(pow(matX(2, 0) * 100, 2));
+
+        if (deltaR < 0.1 && deltaT < 0.1)
+        {
+            printf("surf converge: iter %d\n", iterCount);
+            return false;
+        }
+
         // roll pitch z
         transformCur[0] += matX(0, 0);
         transformCur[1] += matX(1, 0);
@@ -1614,16 +1576,6 @@ public:
         {
             if (isnan(transformCur[i]))
                 transformCur[i] = 0;
-        }
-
-        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2) +
-                            pow(rad2deg(matX(1, 0)), 2));
-        float deltaT = sqrt(pow(matX(2, 0) * 100, 2));
-
-        if (deltaR < 0.1 && deltaT < 0.1)
-        {
-            printf("surf converge: iter %d\n", iterCount);
-            return false;
         }
 
         return true;
@@ -1758,6 +1710,16 @@ public:
             matX = matP * matX2;
         }
 
+        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2));
+        float deltaT = sqrt(pow(matX(1, 0) * 100, 2) +
+                            pow(matX(2, 0) * 100, 2));
+
+        if (deltaR < 0.1 && deltaT < 0.1)
+        {
+            printf("corner converge: iter %d\n", iterCount);
+            return false;
+        }
+
         // yaw x y
         transformCur[2] += matX(0, 0);
         transformCur[3] += matX(1, 0);
@@ -1773,16 +1735,6 @@ public:
         {
             if (isnan(transformCur[i]))
                 transformCur[i] = 0;
-        }
-
-        float deltaR = sqrt(pow(rad2deg(matX(0, 0)), 2));
-        float deltaT = sqrt(pow(matX(1, 0) * 100, 2) +
-                            pow(matX(2, 0) * 100, 2));
-
-        if (deltaR < 0.1 && deltaT < 0.1)
-        {
-            printf("corner converge: iter %d\n", iterCount);
-            return false;
         }
 
         return true;
@@ -1835,6 +1787,7 @@ public:
             matA(i, 4) = Jt.y();
             matA(i, 5) = Jt.z();
             matB(i, 0) = -0.05 * d2;
+            // matB(i, 0) = - d2;
         }
 
         // Ax=B,通解x=(At*A).inv*At*B
@@ -1963,6 +1916,9 @@ public:
                 continue;
             }
 
+            // printf("surf feature 0: %lf %lf %lf", pointOri.x, pointOri.y, pointOri.z);
+            // printf(" coeff: %lf %lf %lf %lf", coeff.x, coeff.y, coeff.z, coeff.intensity);
+
             Eigen::Vector3f p(pointOri.x, pointOri.y, pointOri.z);
             Eigen::Vector3f w(coeff.x, coeff.y, coeff.z);
 
@@ -1982,6 +1938,7 @@ public:
             // matA(i, 4) = Jt.y();
             // matA(i, 5) = Jt.z();
             matB(i, 0) = -0.05 * d2;
+            // matB(i, 0) = -d2;
             // printf("%d\n", i);
             // std::cout << matA << std::endl;
             // std::cout << matB << std::endl;
@@ -2124,7 +2081,7 @@ public:
             matA(i, 1) = Jt.x();
             matA(i, 2) = Jt.y();
             matB(i, 0) = -0.05 * d2;
-
+            // matB(i, 0) = -d2;
             // std::cout << "w:" << w.transpose() << " d2:" << d2 << std::endl;
         }
 
@@ -2799,6 +2756,7 @@ public:
 
     void runFeatureAssociation()
     {
+        TicToc tic_odom, tic_features;
 
         if (newSegmentedCloud && newSegmentedCloudInfo && newOutlierCloud &&
             std::abs(timeNewSegmentedCloudInfo - timeNewSegmentedCloud) < 0.05 &&
@@ -2815,7 +2773,7 @@ public:
         }
 
         printf("new cloud: %lf\n", timeNewSegmentedCloud);
-
+        tic_features.Tic();
         /**
         	1. Feature Extraction
         */
@@ -2827,8 +2785,10 @@ public:
 
         extractFeatures();
 
+        printf("calc features cost: %lfms\n", tic_features.Toc());
         publishCloud(); // cloud for visualization
 
+        tic_odom.Tic();
         /**
 		2. Feature Association
         */
@@ -2840,10 +2800,11 @@ public:
 
         updateInitialGuess();
 
-        updateTransformation();
+        updateTransformationX();
 
         integrateTransformation();
 
+        printf("calc laser odom cost: %lfms\n", tic_odom.Toc());
         publishOdometry();
 
         publishCloudsLast(); // cloud to mapOptimization
