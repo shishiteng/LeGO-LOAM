@@ -230,7 +230,7 @@ public:
         subLaserCloudSurfLast = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 2, &mapOptimization::laserCloudSurfLastHandler, this);
         subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
         // subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
-        
+
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &mapOptimization::laserOdometryHandler, this);
         subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &mapOptimization::imuHandler, this);
 
@@ -1757,6 +1757,8 @@ public:
 
             if (timeLaserOdometry - timeLastProcessing >= mappingProcessInterval)
             {
+                TicToc tic_map;
+                tic_map.Tic();
 
                 timeLastProcessing = timeLaserOdometry;
 
@@ -1779,6 +1781,8 @@ public:
                 publishKeyPosesAndFrames();
 
                 clearCloud();
+
+                ROS_INFO("map optimize cost: %lfms", tic_map.Toc());
             }
         }
     }
