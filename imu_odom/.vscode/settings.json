@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "thread": "cpp",
+        "core": "cpp",
+        "sparsecore": "cpp",
+        "numericaldiff": "cpp",
+        "iostream": "cpp",
+        "complex": "cpp"
+    }
+}

@@ -174,6 +174,9 @@ public:
 
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
     {
+        TicToc t_cloud;
+        t_cloud.Tic();
+
         // 1. Convert ros message to pcl point cloud
         copyPointCloud(laserCloudMsg);
         // 2. Start and end angle of a scan
@@ -188,6 +191,8 @@ public:
         publishCloud();
         // 7. Reset parameters for next iteration
         resetParameters();
+
+        ROS_INFO("image projection cost: %lfms", t_cloud.Toc());
     }
 
     void findStartEndAngle()

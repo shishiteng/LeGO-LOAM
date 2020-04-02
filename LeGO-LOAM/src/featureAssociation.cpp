@@ -2772,7 +2772,7 @@ public:
             return;
         }
 
-        printf("new cloud: %lf\n", timeNewSegmentedCloud);
+        ROS_DEBUG("new cloud: %lf", timeNewSegmentedCloud);
         tic_features.Tic();
         /**
         	1. Feature Extraction
@@ -2785,27 +2785,9 @@ public:
 
         extractFeatures();
 
-        printf("calc features cost: %lfms\n", tic_features.Toc());
+        ROS_INFO("calc features cost: %lfms", tic_features.Toc());
+        
         publishCloud(); // cloud for visualization
-
-        tic_odom.Tic();
-        /**
-		2. Feature Association
-        */
-        if (!systemInitedLM)
-        {
-            checkSystemInitialization();
-            return;
-        }
-
-        updateInitialGuess();
-
-        updateTransformationX();
-
-        integrateTransformation();
-
-        printf("calc laser odom cost: %lfms\n", tic_odom.Toc());
-        publishOdometry();
 
         publishCloudsLast(); // cloud to mapOptimization
     }
