@@ -25,7 +25,7 @@ nav_msgs::Path path_;
 using namespace Eigen;
 using namespace std;
 
-#define USE_IMU_POSE 0
+#define USE_IMU_POSE 1
 
 /**************预积分***********************/
 class IntegrationOdometry
@@ -161,7 +161,7 @@ void callback(const nav_msgs::OdometryConstPtr &odom_msg, const sensor_msgs::Imu
 #endif
 
         // 把角速度从imu坐标系转到odom坐标系下
-        angular_velocity = i2o_ * angular_velocity;
+        angular_velocity = i2o_ * (angular_velocity.transpose() * i2o_.inverse()).transpose();
         // angular_velocity[0] = 0;
         // angular_velocity[1] = 0;
 
