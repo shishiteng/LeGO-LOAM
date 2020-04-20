@@ -44,6 +44,10 @@
 
 #include <gtsam/nonlinear/ISAM2.h>
 
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
 using namespace gtsam;
 
 class mapOptimization
@@ -172,12 +176,8 @@ private:
     float transformBefMapped[6];
     float transformAftMapped[6];
 
-    int imuPointerFront;
-    int imuPointerLast;
-
-    double imuTime[imuQueLength];
-    float imuRoll[imuQueLength];
-    float imuPitch[imuQueLength];
+    double imuRPY[3];
+    double imuLastRPY[3];
 
     std::mutex mtx;
 
@@ -231,8 +231,14 @@ public:
         subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
         // subOutlierCloudLast = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 2, &mapOptimization::laserCloudOutlierLastHandler, this);
 
+        typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry, sensor_msgs::Imu> sync_pol;
+        message_filters::Subscriber<sensor_msgs::Imu> imu_sub(nh, "/imu0", 1);
+        message_filters::Subscriber<nav_msgs::Odometry> odom_sub(nh, "/laser_odom_to_init", 1);
+        message_filters::Synchronizer<sync_pol> sync(sync_pol(100), odom_sub, imu_sub);
+        sync.registerCallback(boost::bind(&mapOptimization::imuHandler, this, _1, _2));
+
         subLaserOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &mapOptimization::laserOdometryHandler, this);
-        subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &mapOptimization::imuHandler, this);
+        // subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &mapOptimization::imuHandler, this);
 
         pubHistoryKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/history_cloud", 2);
         pubIcpKeyFrames = nh.advertise<sensor_msgs::PointCloud2>("/corrected_cloud", 2);
@@ -328,14 +334,10 @@ public:
             transformAftMapped[i] = 0;
         }
 
-        imuPointerFront = 0;
-        imuPointerLast = -1;
-
-        for (int i = 0; i < imuQueLength; ++i)
+        for (int i = 0; i < 3; ++i)
         {
-            imuTime[i] = 0;
-            imuRoll[i] = 0;
-            imuPitch[i] = 0;
+            imuRPY[i] = 0;
+            imuLastRPY[i] = 100.0;
         }
 
         gtsam::Vector Vector6(6);
@@ -459,35 +461,11 @@ public:
 
     void transformUpdate()
     {
-        if (imuPointerLast >= 0)
+        if (imuLastRPY[0] != 100.0)
         {
-            float imuRollLast = 0, imuPitchLast = 0;
-            while (imuPointerFront != imuPointerLast)
-            {
-                if (timeLaserOdometry + scanPeriod < imuTime[imuPointerFront])
-                {
-                    break;
-                }
-                imuPointerFront = (imuPointerFront + 1) % imuQueLength;
-            }
-
-            if (timeLaserOdometry + scanPeriod > imuTime[imuPointerFront])
-            {
-                imuRollLast = imuRoll[imuPointerFront];
-                imuPitchLast = imuPitch[imuPointerFront];
-            }
-            else
-            {
-                int imuPointerBack = (imuPointerFront + imuQueLength - 1) % imuQueLength;
-                float ratioFront = (timeLaserOdometry + scanPeriod - imuTime[imuPointerBack]) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-                float ratioBack = (imuTime[imuPointerFront] - timeLaserOdometry - scanPeriod) / (imuTime[imuPointerFront] - imuTime[imuPointerBack]);
-
-                imuRollLast = imuRoll[imuPointerFront] * ratioFront + imuRoll[imuPointerBack] * ratioBack;
-                imuPitchLast = imuPitch[imuPointerFront] * ratioFront + imuPitch[imuPointerBack] * ratioBack;
-            }
-
-            transformTobeMapped[0] = 0.998 * transformTobeMapped[0] + 0.002 * imuPitchLast;
-            transformTobeMapped[2] = 0.998 * transformTobeMapped[2] + 0.002 * imuRollLast;
+            transformTobeMapped[0] = 0.2 * transformTobeMapped[0] + 0.8 * imuRPY[0];
+            transformTobeMapped[1] = 0.2 * transformTobeMapped[1] + 0.8 * imuRPY[1];
+            // transformTobeMapped[2] = 0.998 * transformTobeMapped[2] + 0.002 * imuRollLast;
         }
 
         for (int i = 0; i < 6; i++)
@@ -495,6 +473,8 @@ public:
             transformBefMapped[i] = transformSum[i];
             transformAftMapped[i] = transformTobeMapped[i];
         }
+
+        memcpy(imuLastRPY, imuRPY, sizeof(imuRPY));
     }
 
     void updatePointAssociateToMapSinCos()
@@ -694,17 +674,11 @@ public:
         newLaserOdometry = true;
     }
 
-    void imuHandler(const sensor_msgs::Imu::ConstPtr &imuIn)
+    void imuHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry, const sensor_msgs::Imu::ConstPtr &imuIn)
     {
-        return;
-        double roll, pitch, yaw;
         tf::Quaternion orientation;
         tf::quaternionMsgToTF(imuIn->orientation, orientation);
-        tf::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
-        imuPointerLast = (imuPointerLast + 1) % imuQueLength;
-        imuTime[imuPointerLast] = imuIn->header.stamp.toSec();
-        imuRoll[imuPointerLast] = roll;
-        imuPitch[imuPointerLast] = pitch;
+        tf::Matrix3x3(orientation).getRPY(imuRPY[0], imuRPY[1], imuRPY[2]);
     }
 
     void publishTF()

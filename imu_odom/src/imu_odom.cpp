@@ -161,16 +161,32 @@ void callback(const nav_msgs::OdometryConstPtr &odom_msg, const sensor_msgs::Imu
 #endif
 
         // 把角速度从imu坐标系转到odom坐标系下
-        angular_velocity = i2o_ * (angular_velocity.transpose() * i2o_.inverse()).transpose();
+        // angular_velocity = i2o_ * (angular_velocity.transpose() * i2o_.inverse()).transpose();
+        angular_velocity = i2o_ * angular_velocity;
         // angular_velocity[0] = 0;
         // angular_velocity[1] = 0;
 
+	// TODO:里程计线速度尺度不准，需要标定一下
+        // pintegration_->propagate(dt, linear_velocity * 0.9, angular_velocity);
         pintegration_->propagate(dt, linear_velocity, angular_velocity);
 
         last_time_ = imu_msg->header.stamp.toSec();
 #if USE_IMU_POSE
         last_eular_ = eular_angles;
         last_q_ = q;
+
+        // 如果使用IMU的roll和pitch
+        tf::Quaternion q0(pintegration_->delta_q.x(), pintegration_->delta_q.y(), pintegration_->delta_q.z(), pintegration_->delta_q.w());
+        double RPY[3];
+        tf::Matrix3x3 m = tf::Matrix3x3(q0);
+        m.getRPY(RPY[0], RPY[1], RPY[3]);
+        m.setRPY(roll, pitch, RPY[3]);
+        Eigen::Matrix3d rmat;
+        rmat << m[0][0], m[0][1], m[0][2],
+            m[1][0], m[1][1], m[1][2],
+            m[2][0], m[2][1], m[2][2];
+	// TODO: 要不要使用imu的姿态角度
+        //pintegration_->delta_q = Eigen::Quaterniond(rmat);
 #endif
     }
 
@@ -214,9 +230,9 @@ int main(int argc, char **argv)
     ROS_INFO("\033[1;32m---->\033[0m imu odometry Started.");
 
     i2o_ = Eigen::Matrix3d::Identity();
-    // i2o_ << 0.99990731, -0.010571127, -0.008578172,
-    //     0.010883288, 0.99924862, 0.03719838,
-    //     0.0081784986, -0.037288293, 0.99927109;
+    // i2o_ << 0.999848, -0.000000, -0.017451,
+    //     0.000000, 1.000000, -0.000000,
+    //     0.017451, 0.000000, 0.999848;
 
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub(n, "/odom_chassis", 1);
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub(n, "/imu0", 1);
